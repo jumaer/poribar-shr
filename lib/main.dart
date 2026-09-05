@@ -1,0 +1,42 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'core/constants/app_colors.dart';
+import 'features/auth/presentation/screens/splash_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (_) {}
+  runApp(
+    const ProviderScope(
+      child: MultiFamilyApp(),
+    ),
+  );
+}
+
+class MultiFamilyApp extends StatelessWidget {
+  const MultiFamilyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Family Management',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        scaffoldBackgroundColor: AppColors.background,
+        colorScheme: ColorScheme.dark(
+          primary: AppColors.primaryGreen,
+          secondary: AppColors.primaryRed,
+          surface: AppColors.cardDark,
+        ),
+        fontFamily: 'Roboto',
+      ),
+      home: const SplashScreen(),
+    );
+  }
+}

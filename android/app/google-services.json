@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1052479560086",
+    "project_id": "srsapp-38f24",
+    "storage_bucket": "srsapp-38f24.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1052479560086:android:6a0c8f1c18782f185565b7",
+        "android_client_info": {
+          "package_name": "com.shrfamily.shr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0gl7sbK0ZiSQzLRXvRwVFbsHYc-kpzro"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
