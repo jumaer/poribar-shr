@@ -23,6 +23,7 @@ import '../../../../core/widgets/global_delete_dialog.dart';
 import '../widgets/edit_expense_sheet.dart';
 import '../widgets/salary_celebration_dialog.dart';
 import '../../../splash/presentation/widgets/update_splash_dialog.dart';
+import '../../../../core/services/notification_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -34,6 +35,21 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final List<Map<String, String>> _problemList = [];
   final TextEditingController _problemInputCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(authUserProvider);
+      if (user != null) {
+        final id = user.phoneNumber.isNotEmpty ? user.phoneNumber : user.activeFamilyId;
+        NotificationService().initializeNotificationEngine(userIdOrPhone: id);
+        if (user.activeFamilyId.isNotEmpty) {
+          NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/constants/app_colors.dart';
+import 'core/services/notification_service.dart';
 import 'features/auth/presentation/screens/splash_screen.dart';
 
 Future<void> main() async {
@@ -11,6 +13,7 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (_) {}
   runApp(
     const ProviderScope(

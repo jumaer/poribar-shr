@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/firestore_image_service.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/splash_config_service.dart';
 import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../expenses/presentation/screens/dashboard_screen.dart';
@@ -31,6 +32,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     _animController.forward();
 
     _loadSplashImage();
+
+    // Trigger notification permission request right after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(authUserProvider);
+      NotificationService().initializeNotificationEngine(
+        userIdOrPhone: user?.phoneNumber.isNotEmpty == true ? user!.phoneNumber : user?.activeFamilyId,
+      );
+    });
 
     Future.delayed(const Duration(milliseconds: 2000), () {
       if (mounted) {

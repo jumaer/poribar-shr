@@ -31,6 +31,12 @@ class AppNotificationItem {
   });
 }
 
+/// Top-level background message handler required by Firebase Messaging
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('FCM Background message received: ${message.messageId}');
+}
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -42,6 +48,7 @@ class NotificationService {
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _familyNotifSub;
   String? _cachedFcmToken;
+  bool _isInitialized = false;
 
   Stream<List<AppNotificationItem>> get notificationStream => _controller.stream;
   List<AppNotificationItem> get currentNotifications => List.unmodifiable(_notifications);
@@ -51,6 +58,8 @@ class NotificationService {
   Future<void> initializeNotificationEngine({String? userIdOrPhone}) async {
     try {
       final messaging = FirebaseMessaging.instance;
+
+      // Android 13+ (API 33+) & iOS runtime notification permission request
       final settings = await messaging.requestPermission(
         alert: true,
         announcement: false,
@@ -60,10 +69,24 @@ class NotificationService {
         provisional: false,
         sound: true,
       );
-      debugPrint('Notification permission granted: ${settings.authorizationStatus}');
+      debugPrint('Notification permission status: ${settings.authorizationStatus}');
+
+      // Enable foreground display options
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
       _cachedFcmToken = await messaging.getToken();
       debugPrint('Firebase FCM Token: $_cachedFcmToken');
+
+      if (userIdOrPhone != null && userIdOrPhone.isNotEmpty && _cachedFcmToken != null) {
+        await syncTokenToFirestore(userIdOrPhone, _cachedFcmToken!);
+      }
+
+      if (_isInitialized) return;
+      _isInitialized = true;
 
       messaging.onTokenRefresh.listen((newToken) {
         _cachedFcmToken = newToken;
@@ -71,10 +94,6 @@ class NotificationService {
           syncTokenToFirestore(userIdOrPhone, newToken);
         }
       });
-
-      if (userIdOrPhone != null && userIdOrPhone.isNotEmpty && _cachedFcmToken != null) {
-        await syncTokenToFirestore(userIdOrPhone, _cachedFcmToken!);
-      }
 
       // Foreground notifications listener
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
