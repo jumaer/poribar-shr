@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../domain/entities/expense_entity.dart';
 import '../providers/category_provider.dart';
 import '../providers/expense_provider.dart';
@@ -20,21 +21,6 @@ class _AdvancedExpenseGraphsWidgetState
   DateTime _currentMonth = DateTime.now();
   int _touchedIndex = -1;
 
-  final List<String> _monthNamesBn = [
-    'জানুয়ারি',
-    'ফেব্রুয়ারি',
-    'মার্চ',
-    'এপ্রিল',
-    'মে',
-    'জুন',
-    'জুলাই',
-    'আগস্ট',
-    'সেপ্টেম্বর',
-    'অক্টোবর',
-    'নভেম্বর',
-    'ডিসেম্বর',
-  ];
-
   void _previousMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
@@ -49,6 +35,9 @@ class _AdvancedExpenseGraphsWidgetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = ref.watch(appLocalizationsProvider);
+    final monthName = l10n.translate('month_${_currentMonth.month}');
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -72,7 +61,7 @@ class _AdvancedExpenseGraphsWidgetState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${_monthNamesBn[_currentMonth.month - 1]} ${_currentMonth.year}',
+                    '$monthName ${_currentMonth.year}',
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
@@ -115,7 +104,7 @@ class _AdvancedExpenseGraphsWidgetState
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'মাসিক ট্রেন্ড',
+                        l10n.translate('monthly_trend'),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: _selectedView == 0 ? Colors.white : AppColors.textSecondary,
@@ -139,7 +128,7 @@ class _AdvancedExpenseGraphsWidgetState
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'খাতওয়ারি বন্টন',
+                        l10n.translate('category_distribution'),
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: _selectedView == 1 ? Colors.white : AppColors.textSecondary,
@@ -154,32 +143,32 @@ class _AdvancedExpenseGraphsWidgetState
             ),
           ),
           const SizedBox(height: 16),
-          _selectedView == 0 ? _buildLineChart() : _buildCategoryPieChart(),
+          _selectedView == 0 ? _buildLineChart(l10n) : _buildCategoryPieChart(l10n),
         ],
       ),
     );
   }
 
-  Widget _buildLineChart() {
+  Widget _buildLineChart(dynamic l10n) {
     final allExpenses = ref.watch(expenseListProvider);
 
     if (allExpenses.isEmpty) {
       return Container(
         height: 160,
         alignment: Alignment.center,
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.show_chart, color: AppColors.textMuted, size: 36),
-            SizedBox(height: 8),
+            const Icon(Icons.show_chart, color: AppColors.textMuted, size: 36),
+            const SizedBox(height: 8),
             Text(
-              'কোন লেনদেন রেকর্ড করা হয়নি',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              l10n.translate('no_transactions_recorded'),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
-              'নিচের + বাটনে চেপে আয় বা খরচ যোগ করুন',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+              l10n.translate('add_transaction_hint'),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ],
         ),
@@ -217,9 +206,9 @@ class _AdvancedExpenseGraphsWidgetState
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildLegendItem('আয়', AppColors.accentGreen),
+            _buildLegendItem(l10n.translate('income_legend'), AppColors.accentGreen),
             const SizedBox(width: 16),
-            _buildLegendItem('খরচ', AppColors.accentRed),
+            _buildLegendItem(l10n.translate('expense_legend'), AppColors.accentRed),
           ],
         ),
         const SizedBox(height: 14),
@@ -282,8 +271,9 @@ class _AdvancedExpenseGraphsWidgetState
                   getTooltipItems: (touchedSpots) {
                     return touchedSpots.map((spot) {
                       final isIncome = spot.barIndex == 0;
+                      final typeText = isIncome ? l10n.translate('income_legend') : l10n.translate('expense_legend');
                       return LineTooltipItem(
-                        '${spot.x.toInt()} তারিখ\n${isIncome ? "আয়" : "খরচ"}: ৳${spot.y.toStringAsFixed(0)}',
+                        '${spot.x.toInt()} ${l10n.translate('date_suffix')}\n$typeText: ৳${spot.y.toStringAsFixed(0)}',
                         TextStyle(
                           color: isIncome ? AppColors.accentGreen : AppColors.accentRed,
                           fontSize: 11,
@@ -327,21 +317,21 @@ class _AdvancedExpenseGraphsWidgetState
     );
   }
 
-  Widget _buildCategoryPieChart() {
+  Widget _buildCategoryPieChart(dynamic l10n) {
     final categories = ref.watch(categoryAnalyticsProvider);
 
     if (categories.isEmpty) {
       return Container(
         height: 150,
         alignment: Alignment.center,
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.pie_chart_outline, color: AppColors.textMuted, size: 36),
-            SizedBox(height: 8),
+            const Icon(Icons.pie_chart_outline, color: AppColors.textMuted, size: 36),
+            const SizedBox(height: 8),
             Text(
-              'কোন ক্যাটাগরি খরচ পাওয়া যায়নি',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              l10n.translate('no_category_expense'),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ],
         ),

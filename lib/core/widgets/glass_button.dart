@@ -21,7 +21,10 @@ class GlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = isRed ? AppColors.primaryRed : AppColors.primaryGreen;
+    final isDisabled = onPressed == null && !isLoading;
+    final baseColor = isDisabled
+        ? Colors.white.withValues(alpha: 0.08)
+        : (isRed ? AppColors.primaryRed : AppColors.primaryGreen);
 
     return SizedBox(
       width: width,
@@ -29,7 +32,7 @@ class GlassButton extends StatelessWidget {
         color: baseColor,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          onTap: isLoading ? null : onPressed,
+          onTap: (isLoading || isDisabled) ? null : onPressed,
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),

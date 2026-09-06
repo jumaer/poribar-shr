@@ -1,22 +1,21 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/widgets/glass_button.dart';
 import '../../../../core/widgets/glass_text_field.dart';
 import '../../../../core/widgets/global_bottom_sheet.dart';
 
-class OtpVerificationSheet extends StatefulWidget {
+class OtpVerificationSheet extends ConsumerStatefulWidget {
   final String phoneNumber;
-  final String generatedOtp;
   final Future<void> Function() onVerified;
 
   const OtpVerificationSheet({
     super.key,
     required this.phoneNumber,
-    required this.generatedOtp,
     required this.onVerified,
   });
 
@@ -25,117 +24,134 @@ class OtpVerificationSheet extends StatefulWidget {
     required String phoneNumber,
     required Future<void> Function() onVerified,
   }) {
-    final random = Random();
-    final otp = (100000 + random.nextInt(900000)).toString();
-
     return GlobalBottomSheet.show<bool>(
       context: context,
-      title: 'মোবাইল নম্বর যাচাইকরণ',
+      title: 'OTP Verification',
       child: OtpVerificationSheet(
         phoneNumber: phoneNumber,
-        generatedOtp: otp,
         onVerified: onVerified,
       ),
     );
   }
 
   @override
-  State<OtpVerificationSheet> createState() => _OtpVerificationSheetState();
+  ConsumerState<OtpVerificationSheet> createState() => _OtpVerificationSheetState();
 }
 
-class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
+class _OtpVerificationSheetState extends ConsumerState<OtpVerificationSheet> {
   final _otpController = TextEditingController();
-  late String _currentOtp;
   String? _verificationId;
-  int _resendCountdown = 45;
+  int? _resendToken;
+  int _resendCountdown = 60;
   Timer? _timer;
+  bool _isSendingCode = true;
   bool _isVerifying = false;
-  String? _error;
+  String? _errorMessage;
+  String? _statusInfo;
 
   @override
   void initState() {
     super.initState();
-    _currentOtp = widget.generatedOtp;
     _startCountdown();
     _triggerFirebaseMobileAuth();
-
-    // Show simulation banner for immediate feedback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.sms_outlined, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'পরিবার বন্ধন ওটিপি কোড: $_currentOtp',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.primaryGreen,
-            duration: const Duration(seconds: 8),
-            action: SnackBarAction(
-              label: 'অটো ফিল',
-              textColor: Colors.white,
-              onPressed: () {
-                _otpController.text = _currentOtp;
-              },
-            ),
-          ),
-        );
-      }
-    });
   }
 
-  Future<void> _triggerFirebaseMobileAuth() async {
-    try {
-      var phone = widget.phoneNumber.trim().replaceAll(RegExp(r'[^\d+]'), '');
-      if (phone.startsWith('0')) {
-        phone = '+880${phone.substring(1)}';
-      } else if (phone.startsWith('880')) {
-        phone = '+$phone';
-      } else if (!phone.startsWith('+')) {
-        phone = '+880$phone';
-      }
+  String _formatPhoneForFirebase(String raw) {
+    var phone = raw.trim().replaceAll(RegExp(r'[^\d+]'), '');
+    if (phone.startsWith('0')) {
+      phone = '+880${phone.substring(1)}';
+    } else if (phone.startsWith('880')) {
+      phone = '+$phone';
+    } else if (!phone.startsWith('+')) {
+      phone = '+880$phone';
+    }
+    return phone;
+  }
 
+  Future<void> _triggerFirebaseMobileAuth({bool isResend = false}) async {
+    final l10n = ref.read(appLocalizationsProvider);
+    setState(() {
+      _isSendingCode = true;
+      _errorMessage = null;
+      _statusInfo = l10n.translate('otp_sending_status');
+    });
+
+    final formattedPhone = _formatPhoneForFirebase(widget.phoneNumber);
+
+    try {
       await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phone,
-        timeout: const Duration(seconds: 45),
+        phoneNumber: formattedPhone,
+        timeout: const Duration(seconds: 60),
+        forceResendingToken: isResend ? _resendToken : null,
         verificationCompleted: (PhoneAuthCredential credential) async {
+          debugPrint('Firebase auto-verification completed');
           if (credential.smsCode != null && mounted) {
             _otpController.text = credential.smsCode!;
           }
-          await _confirmSuccess();
+          try {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+            await _confirmSuccess();
+          } catch (e) {
+            debugPrint('Auto signInWithCredential error: $e');
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
           debugPrint('Firebase Phone Auth failure: [${e.code}] ${e.message}');
-          if (mounted) {
-            setState(() {
-              if (e.code == 'app-not-verified' || e.code == 'developer-error') {
-                _error = 'সরাসরি এসএমএস পাঠাতে ফায়ারবেস কনসোলে SHA-1 যোগ করতে হবে। নিচে প্রদত্ত ওটিপি কোডটি ব্যবহার করুন।';
-              }
-            });
+          if (!mounted) return;
+          String friendly;
+          switch (e.code) {
+            case 'operation-not-allowed':
+              friendly = 'ফায়ারবেস কনসোলে বাংলাদেশ (+880) এর এসএমএস পলিসি অথবা টেস্ট ফোন নম্বর সক্রিয় করুন।';
+              break;
+            case 'invalid-phone-number':
+              friendly = 'মোবাইল নম্বরটি সঠিক নয়। অনুগ্রহ করে সঠিক ১১ ডিজিটের নম্বর দিন।';
+              break;
+            case 'too-many-requests':
+              friendly = 'খুব বেশি রিকোয়েস্ট পাঠানো হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।';
+              break;
+            case 'app-not-verified':
+            case 'developer-error':
+              friendly = 'ফায়ারবেস কনসোলে অ্যাপের SHA-1 ও SHA-256 যোগ করা প্রয়োজন।';
+              break;
+            default:
+              friendly = e.message ?? l10n.translate('otp_verification_failed');
           }
+          setState(() {
+            _isSendingCode = false;
+            _errorMessage = friendly;
+            _statusInfo = null;
+          });
         },
         codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
+          debugPrint('Firebase SMS OTP codeSent: verificationId=$verificationId');
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _isSendingCode = false;
+            _statusInfo = '$formattedPhone ${l10n.translate("otp_sent_status")}';
+          });
         },
         codeAutoRetrievalTimeout: (String verificationId) {
+          if (!mounted) return;
           _verificationId = verificationId;
         },
       );
     } catch (e) {
-      debugPrint('Firebase verify phone error: $e');
+      debugPrint('verifyPhoneNumber invocation error: $e');
+      if (mounted) {
+        setState(() {
+          _isSendingCode = false;
+          _errorMessage = '$e';
+          _statusInfo = null;
+        });
+      }
     }
   }
 
   void _startCountdown() {
     _timer?.cancel();
-    _resendCountdown = 45;
+    _resendCountdown = 60;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (_resendCountdown > 0) {
@@ -154,66 +170,60 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
   }
 
   void _resendOtp() {
-    final random = Random();
-    final newOtp = (100000 + random.nextInt(900000)).toString();
-    setState(() {
-      _currentOtp = newOtp;
-      _error = null;
-    });
     _startCountdown();
-    _triggerFirebaseMobileAuth();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('নতুন ওটিপি কোড পাঠানো হয়েছে: $_currentOtp'),
-        backgroundColor: AppColors.primaryGreen,
-        action: SnackBarAction(
-          label: 'অটো ফিল',
-          textColor: Colors.white,
-          onPressed: () => _otpController.text = _currentOtp,
-        ),
-      ),
-    );
+    _triggerFirebaseMobileAuth(isResend: true);
   }
 
   Future<void> _verifyOtp() async {
+    final l10n = ref.read(appLocalizationsProvider);
     final entered = _otpController.text.trim();
     if (entered.length != 6) {
-      setState(() => _error = '৬ ডিজিটের কোডটি সঠিকভাবে লিখুন');
+      setState(() => _errorMessage = l10n.translate('otp_enter_6_digits'));
+      return;
+    }
+
+    if (_verificationId == null) {
+      setState(() => _errorMessage = l10n.translate('otp_code_not_sent_yet'));
       return;
     }
 
     setState(() {
       _isVerifying = true;
-      _error = null;
+      _errorMessage = null;
     });
 
-    if (_verificationId != null) {
-      try {
-        final credential = PhoneAuthProvider.credential(
-          verificationId: _verificationId!,
-          smsCode: entered,
-        );
-        await FirebaseAuth.instance.signInWithCredential(credential);
-      } catch (_) {
-        if (entered != _currentOtp) {
-          setState(() {
-            _error = 'ভুল কোড! সঠিক কোড প্রদান করুন অথবা পুনরায় কোড পাঠান';
-            _isVerifying = false;
-          });
-          return;
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: entered,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      debugPrint('Firebase Phone Auth signInWithCredential SUCCESS');
+      await _confirmSuccess();
+    } on FirebaseAuthException catch (e) {
+      debugPrint('OTP verify error [${e.code}]: ${e.message}');
+      if (mounted) {
+        String msg;
+        if (e.code == 'invalid-verification-code') {
+          msg = l10n.translate('otp_invalid_code');
+        } else if (e.code == 'session-expired') {
+          msg = l10n.translate('otp_session_expired');
+        } else {
+          msg = e.message ?? l10n.translate('otp_verification_failed');
         }
-      }
-    } else {
-      if (entered != _currentOtp) {
         setState(() {
-          _error = 'ভুল কোড! সঠিক কোড প্রদান করুন অথবা পুনরায় কোড পাঠান';
           _isVerifying = false;
+          _errorMessage = msg;
         });
-        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+          _errorMessage = '$e';
+        });
       }
     }
-
-    await _confirmSuccess();
   }
 
   Future<void> _confirmSuccess() async {
@@ -225,7 +235,7 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceAll('Exception:', '').trim();
+          _errorMessage = e.toString().replaceAll('Exception:', '').trim();
           _isVerifying = false;
         });
       }
@@ -234,6 +244,8 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = ref.watch(appLocalizationsProvider);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -247,103 +259,107 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.verified_user_outlined, color: AppColors.accentGreen, size: 22),
+              const Icon(Icons.phone_android_rounded, color: AppColors.accentGreen, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '${widget.phoneNumber} নম্বরে ৬ ডিজিটের গোপন কোড পাঠানো হয়েছে',
+                  '${widget.phoneNumber} ${l10n.translate("otp_info_prefix")}',
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                 ),
               ),
             ],
           ),
         ),
-        Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.cardDarkSecondary,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.mark_email_read_outlined, color: AppColors.accentGreen, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'যাচাইকরণ কোড: $_currentOtp',
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  _otpController.text = _currentOtp;
-                  setState(() => _error = null);
-                },
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryGreen,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'অটো ফিল',
-                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (_error != null) ...[
+        if (_statusInfo != null && _errorMessage == null) ...[
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.cardDarkSecondary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.iosDivider),
+            ),
+            child: Row(
+              children: [
+                if (_isSendingCode)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                  )
+                else
+                  const Icon(Icons.mark_email_read_outlined, color: AppColors.accentGreen, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _statusInfo!,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        if (_errorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: AppColors.darkRed,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.primaryRed),
             ),
-            child: Text(
-              _error!,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: AppColors.primaryRed, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
         ],
         GlassTextField(
           controller: _otpController,
-          label: '৬ ডিজিটের গোপন কোড',
+          label: l10n.translate('otp_code_label'),
           hint: '••••••',
           maxLength: 6,
           keyboardType: TextInputType.number,
           autofillHints: const [AutofillHints.oneTimeCode],
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          prefixIcon: Icons.lock_clock_outlined,
-          suffixIcon: IconButton(
-            icon: const Icon(Icons.flash_on_rounded, color: AppColors.accentGreen, size: 20),
-            tooltip: 'অটো ফিল কোড',
-            onPressed: () => _otpController.text = _currentOtp,
-          ),
+          prefixIcon: Icons.sms_outlined,
         ),
         const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              _resendCountdown > 0
-                  ? 'পুনরায় পাঠাতে অপেক্ষা: $_resendCountdown সেকেন্ড'
-                  : 'কোড পাননি?',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            Expanded(
+              child: Text(
+                _resendCountdown > 0
+                    ? '${l10n.translate("otp_wait_seconds")}: $_resendCountdown ${l10n.translate("otp_seconds_unit")}'
+                    : l10n.translate('otp_didnt_get_code'),
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             TextButton(
-              onPressed: _resendCountdown == 0 ? _resendOtp : null,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: (_resendCountdown == 0 && !_isSendingCode) ? _resendOtp : null,
               child: Text(
-                'কোড পুনরায় পাঠান',
+                l10n.translate('otp_resend'),
                 style: TextStyle(
-                  color: _resendCountdown == 0 ? AppColors.accentGreen : AppColors.textMuted,
+                  color: (_resendCountdown == 0 && !_isSendingCode)
+                      ? AppColors.accentGreen
+                      : AppColors.textMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -353,10 +369,10 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
         ),
         const SizedBox(height: 16),
         GlassButton(
-          text: _isVerifying ? 'যাচাই করা হচ্ছে...' : 'যাচাই সম্পন্ন করে পরিবার চালু করুন',
+          text: _isVerifying ? l10n.translate('otp_verifying') : l10n.translate('otp_verify_btn'),
           isLoading: _isVerifying,
-          icon: Icons.check_circle_outline,
-          onPressed: _isVerifying ? null : _verifyOtp,
+          icon: Icons.verified_user_outlined,
+          onPressed: (_isVerifying || _isSendingCode) ? null : _verifyOtp,
         ),
         const SizedBox(height: 8),
       ],

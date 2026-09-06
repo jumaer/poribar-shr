@@ -56,9 +56,52 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      try {
+        await db.execute('ALTER TABLE family_members ADD COLUMN canAddMembers INTEGER DEFAULT 0;');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE family_members ADD COLUMN canSetAlarms INTEGER DEFAULT 1;');
+      } catch (_) {}
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS amols (
+            amolId TEXT,
+            phoneNumber TEXT,
+            familyId TEXT,
+            nameBn TEXT,
+            nameAr TEXT,
+            count INTEGER,
+            target INTEGER,
+            date TEXT,
+            updatedAt INTEGER,
+            PRIMARY KEY (amolId, phoneNumber, date)
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS prayer_alarms (
+            waqtId TEXT,
+            phoneNumber TEXT,
+            isAlarmEnabled INTEGER,
+            reminderOffsetMinutes INTEGER,
+            soundType TEXT,
+            updatedAt INTEGER,
+            PRIMARY KEY (waqtId, phoneNumber)
+          )
+        ''');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -107,6 +150,8 @@ class AppDatabase {
         canUpload INTEGER,
         canViewExpenses INTEGER,
         canSendPushNotification INTEGER,
+        canAddMembers INTEGER,
+        canSetAlarms INTEGER,
         joinedAt TEXT
       )
     ''');
@@ -142,6 +187,35 @@ class AppDatabase {
         key TEXT PRIMARY KEY,
         value TEXT,
         updatedAt INTEGER
+      )
+    ''');
+
+    // 7. Amols table
+    await db.execute('''
+      CREATE TABLE amols (
+        amolId TEXT,
+        phoneNumber TEXT,
+        familyId TEXT,
+        nameBn TEXT,
+        nameAr TEXT,
+        count INTEGER,
+        target INTEGER,
+        date TEXT,
+        updatedAt INTEGER,
+        PRIMARY KEY (amolId, phoneNumber, date)
+      )
+    ''');
+
+    // 8. Prayer Alarms table
+    await db.execute('''
+      CREATE TABLE prayer_alarms (
+        waqtId TEXT,
+        phoneNumber TEXT,
+        isAlarmEnabled INTEGER,
+        reminderOffsetMinutes INTEGER,
+        soundType TEXT,
+        updatedAt INTEGER,
+        PRIMARY KEY (waqtId, phoneNumber)
       )
     ''');
   }

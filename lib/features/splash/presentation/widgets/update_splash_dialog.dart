@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
 import '../../../../core/services/splash_config_service.dart';
 import '../../../../core/widgets/glass_button.dart';
@@ -44,7 +45,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
     }
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source, AppLocalizations l10n) async {
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
@@ -65,7 +66,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ছবি নির্বাচন করতে সমস্যা হয়েছে: $e'),
+            content: Text('${l10n.translate("splash_image_pick_error")}: $e'),
             backgroundColor: AppColors.primaryRed,
           ),
         );
@@ -73,7 +74,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
     }
   }
 
-  Future<void> _saveSplash() async {
+  Future<void> _saveSplash(AppLocalizations l10n) async {
     if (_selectedImageBase64 == null) return;
 
     setState(() => _isLoading = true);
@@ -81,7 +82,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
     try {
       final user = ref.read(authUserProvider);
       final familyId = user?.activeFamilyId ?? 'fam_01';
-      final userName = user?.fullName ?? 'এডমিন';
+      final userName = user?.fullName ?? 'Admin';
 
       await SplashConfigService().updateSplashImage(
         familyId: familyId,
@@ -91,10 +92,10 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🎉 স্প্ল্যাশ স্ক্রিনের ছবি সফলভাবে ফায়ারবেসে সংরক্ষিত হয়েছে!'),
+        SnackBar(
+          content: Text(l10n.translate('splash_save_success')),
           backgroundColor: AppColors.primaryGreen,
-          duration: Duration(seconds: 3),
+          duration: const Duration(seconds: 3),
         ),
       );
       Navigator.pop(context);
@@ -102,7 +103,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('সংরক্ষণ ব্যর্থ হয়েছে: $e'),
+            content: Text('${l10n.translate("splash_save_failed")}: $e'),
             backgroundColor: AppColors.primaryRed,
           ),
         );
@@ -112,7 +113,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
     }
   }
 
-  Future<void> _resetToDefault() async {
+  Future<void> _resetToDefault(AppLocalizations l10n) async {
     setState(() => _isLoading = true);
 
     try {
@@ -123,10 +124,10 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ডিফল্ট পরিবার লোগো সফলভাবে রিসেট করা হয়েছে।'),
+        SnackBar(
+          content: Text(l10n.translate('splash_reset_success')),
           backgroundColor: AppColors.primaryBlue,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       Navigator.pop(context);
@@ -134,7 +135,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('রিসেট ব্যর্থ হয়েছে: $e'),
+            content: Text('${l10n.translate("splash_reset_failed")}: $e'),
             backgroundColor: AppColors.primaryRed,
           ),
         );
@@ -147,6 +148,7 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
   @override
   Widget build(BuildContext context) {
     final displayImage = _selectedImageBase64 ?? _currentSplashImage;
+    final l10n = ref.watch(appLocalizationsProvider);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -165,13 +167,13 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.palette_outlined, color: AppColors.accentGreen, size: 22),
-                    SizedBox(width: 8),
+                    const Icon(Icons.palette_outlined, color: AppColors.accentGreen, size: 22),
+                    const SizedBox(width: 8),
                     Text(
-                      'স্প্ল্যাশ স্ক্রিন ছবি পরিবর্তন',
-                      style: TextStyle(
+                      l10n.translate('splash_change_title'),
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -186,9 +188,9 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
               ],
             ),
             const SizedBox(height: 12),
-            const Text(
-              'ব্যবহারকারী বা এডমিন হিসেবে পরিবারের অ্যাপ চালু হওয়ার স্প্ল্যাশ স্ক্রিনের ছবি কাস্টমাইজ করুন:',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            Text(
+              l10n.translate('splash_change_desc'),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 18),
             // Preview box
@@ -237,10 +239,10 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
             Center(
               child: Text(
                 _selectedImageBase64 != null
-                    ? '✓ নতুন ছবি নির্বাচিত হয়েছে (প্রিভিউ)'
+                    ? l10n.translate('splash_new_selected')
                     : (_currentSplashImage != null
-                        ? 'বর্তমান কাস্টম স্প্ল্যাশ ছবি'
-                        : 'ডিফল্ট অ্যাপ লোগো সক্রিয়'),
+                        ? l10n.translate('splash_current_custom')
+                        : l10n.translate('splash_default_active')),
                 style: TextStyle(
                   color: _selectedImageBase64 != null
                       ? AppColors.primaryGreen
@@ -255,9 +257,9 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.camera),
+                    onPressed: () => _pickImage(ImageSource.camera, l10n),
                     icon: const Icon(Icons.camera_alt_outlined, size: 18, color: AppColors.primaryGreen),
-                    label: const Text('ক্যামেরা', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    label: Text(l10n.translate('camera'), style: const TextStyle(fontSize: 12, color: Colors.white)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       side: const BorderSide(color: AppColors.iosDivider),
@@ -268,9 +270,9 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickImage(ImageSource.gallery),
+                    onPressed: () => _pickImage(ImageSource.gallery, l10n),
                     icon: const Icon(Icons.photo_library_outlined, size: 18, color: Colors.amber),
-                    label: const Text('গ্যালারি', style: TextStyle(fontSize: 12, color: Colors.white)),
+                    label: Text(l10n.translate('gallery'), style: const TextStyle(fontSize: 12, color: Colors.white)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       side: const BorderSide(color: AppColors.iosDivider),
@@ -291,17 +293,17 @@ class _UpdateSplashDialogState extends ConsumerState<UpdateSplashDialog> {
             else ...[
               if (_selectedImageBase64 != null)
                 GlassButton(
-                  text: 'স্প্ল্যাশ ছবি সংরক্ষণ করুন',
+                  text: l10n.translate('splash_save_btn'),
                   icon: Icons.check_circle_outline,
-                  onPressed: _saveSplash,
+                  onPressed: () => _saveSplash(l10n),
                 ),
               if (_currentSplashImage != null && _selectedImageBase64 == null)
                 TextButton.icon(
-                  onPressed: _resetToDefault,
+                  onPressed: () => _resetToDefault(l10n),
                   icon: const Icon(Icons.refresh, color: AppColors.primaryRed, size: 18),
-                  label: const Text(
-                    'ডিফল্ট লোগোতে রিসেট করুন',
-                    style: TextStyle(color: AppColors.primaryRed, fontSize: 13),
+                  label: Text(
+                    l10n.translate('splash_reset_btn'),
+                    style: const TextStyle(color: AppColors.primaryRed, fontSize: 13),
                   ),
                 ),
             ],

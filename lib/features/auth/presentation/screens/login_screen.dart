@@ -10,6 +10,7 @@ import '../../../../core/widgets/glass_text_field.dart';
 import '../../../expenses/presentation/screens/dashboard_screen.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/otp_verification_sheet.dart';
+import '../../../family_management/data/datasources/family_firestore_datasource.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +20,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final FamilyFirestoreDatasource _datasource = FamilyFirestoreDatasource();
   int _activeTab = 0;
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -64,8 +66,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             );
 
         // Initialize Firebase notifications & retrieve/sync FCM token
+        final user = ref.read(authUserProvider);
         try {
           await NotificationService().initializeNotificationEngine(userIdOrPhone: phone);
+          if (user?.activeFamilyId != null && user!.activeFamilyId.isNotEmpty) {
+            NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+            if (NotificationService().cachedFcmToken != null) {
+              await NotificationService().syncTokenToFirestore(
+                phone,
+                NotificationService().cachedFcmToken!,
+                familyId: user.activeFamilyId,
+              );
+            }
+          }
         } catch (_) {}
 
         if (mounted) {
@@ -107,7 +120,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
 
-      setState(() => _errorMessage = null);
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
+      try {
+        final existing = await _datasource.getUserByPhone(cleanPhone);
+        if (existing != null) {
+          final role = existing['role']?.toString() ?? 'member';
+          final isOwner = existing['isFamilyOwner'] == true;
+          setState(() {
+            _isLoading = false;
+            if (role == 'admin' || isOwner) {
+              _errorMessage = 'এই নম্বরে ইতিমধ্যে অ্যাডমিন অ্যাকাউন্ট রয়েছে! নতুন অ্যাকাউন্ট তৈরি সম্ভব নয়, অনুগ্রহ করে সরাসরি লগইন করুন।';
+            } else {
+              _errorMessage = 'এই নম্বরে ইতিমধ্যে পরিবার সদস্যের অ্যাকাউন্ট রয়েছে! অনুগ্রহ করে সরাসরি পাসওয়ার্ড দিয়ে লগইন করুন।';
+            }
+          });
+          return;
+        }
+      } catch (_) {}
+
+      setState(() => _isLoading = false);
+      if (!mounted) return;
 
       // Open OTP Verification Sheet
       final verified = await OtpVerificationSheet.show(
@@ -120,8 +157,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 password: password,
               );
           // Initialize Firebase notifications & retrieve/sync FCM token
+          final registeredUser = ref.read(authUserProvider);
           try {
             await NotificationService().initializeNotificationEngine(userIdOrPhone: phone);
+            if (registeredUser?.activeFamilyId != null && registeredUser!.activeFamilyId.isNotEmpty) {
+              NotificationService().listenToFamilyNotifications(registeredUser.activeFamilyId);
+              if (NotificationService().cachedFcmToken != null) {
+                await NotificationService().syncTokenToFirestore(
+                  phone,
+                  NotificationService().cachedFcmToken!,
+                  familyId: registeredUser.activeFamilyId,
+                );
+              }
+            }
           } catch (_) {}
         },
       );

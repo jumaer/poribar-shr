@@ -28,7 +28,7 @@ class MultiFamilyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Family Management',
+      title: 'SRH - এসআরএইচ',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.background,

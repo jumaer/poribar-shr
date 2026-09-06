@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/firestore_image_service.dart';
@@ -21,28 +20,11 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FamilyFirestoreDatasource _datasource = FamilyFirestoreDatasource();
-  String? _fcmToken;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadFcmToken();
-  }
-
-  Future<void> _loadFcmToken() async {
-    final token = NotificationService().cachedFcmToken;
-    if (token != null) {
-      setState(() => _fcmToken = token);
-    } else {
-      final user = ref.read(authUserProvider);
-      await NotificationService().initializeNotificationEngine(
-        userIdOrPhone: user?.phoneNumber ?? user?.uid,
-      );
-      if (mounted) {
-        setState(() => _fcmToken = NotificationService().cachedFcmToken);
-      }
-    }
   }
 
   @override
@@ -68,10 +50,11 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
     }
 
     if (mounted) {
+      final canSendPush = (currentUser?.isAdmin ?? false) || (currentUser?.canSendPushNotification ?? false);
       SendCustomPushSheet.show(
         context: context,
         familyMembers: memberNames,
-        canSend: true,
+        canSend: canSendPush,
       );
     }
   }
@@ -102,73 +85,10 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // Firebase FCM Token Card
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.cardDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.iosDivider),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.cloud_done_outlined, color: AppColors.accentGreen, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Firebase FCM ডিভাইস টোকেন:',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _fcmToken != null
-                            ? '${_fcmToken!.substring(0, _fcmToken!.length > 25 ? 25 : _fcmToken!.length)}...'
-                            : 'টোকেন লোড হচ্ছে / ফায়ারবেস সিংক...',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_fcmToken != null)
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 18, color: AppColors.accentGreen),
-                    tooltip: 'টোকেন কপি করুন',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: _fcmToken!));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Firebase FCM টোকেন ক্লিপবোর্ডে কপি করা হয়েছে!'),
-                          backgroundColor: AppColors.primaryGreen,
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<AppNotificationItem>>(
-              stream: NotificationService().notificationStream,
-              initialData: NotificationService().currentNotifications,
-              builder: (context, snapshot) {
+      body: StreamBuilder<List<AppNotificationItem>>(
+        stream: NotificationService().notificationStream,
+        initialData: NotificationService().currentNotifications,
+        builder: (context, snapshot) {
                 final all = snapshot.data ?? [];
 
                 final messages = all.where((n) => n.tab == NotificationTabType.messages).toList();
@@ -187,9 +107,6 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
                 );
               },
             ),
-          ),
-        ],
-      ),
     );
   }
 

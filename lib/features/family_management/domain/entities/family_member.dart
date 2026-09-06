@@ -7,6 +7,8 @@ class FamilyMember {
   final bool canUpload;
   final bool canViewExpenses;
   final bool canSendPushNotification;
+  final bool canAddMembers;
+  final bool canSetAlarms;
 
   const FamilyMember({
     required this.id,
@@ -17,6 +19,8 @@ class FamilyMember {
     this.canUpload = true,
     this.canViewExpenses = true,
     this.canSendPushNotification = false,
+    this.canAddMembers = false,
+    this.canSetAlarms = true,
   });
 
   bool get isAdmin => role == 'admin' || role == 'owner';
@@ -30,6 +34,8 @@ class FamilyMember {
     bool? canUpload,
     bool? canViewExpenses,
     bool? canSendPushNotification,
+    bool? canAddMembers,
+    bool? canSetAlarms,
   }) {
     return FamilyMember(
       id: id ?? this.id,
@@ -40,6 +46,8 @@ class FamilyMember {
       canUpload: canUpload ?? this.canUpload,
       canViewExpenses: canViewExpenses ?? this.canViewExpenses,
       canSendPushNotification: canSendPushNotification ?? this.canSendPushNotification,
+      canAddMembers: canAddMembers ?? this.canAddMembers,
+      canSetAlarms: canSetAlarms ?? this.canSetAlarms,
     );
   }
 }

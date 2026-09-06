@@ -7,6 +7,7 @@ abstract class FamilyMemberDao {
   Future<void> insertAll(List<Map<String, dynamic>> members, String familyId);
   Future<List<Map<String, dynamic>>> findAll(String familyId);
   Stream<List<Map<String, dynamic>>> watchAll(String familyId);
+  Future<void> updateMember(Map<String, dynamic> data, String familyId, String phone);
 }
 
 class SqliteFamilyMemberDao implements FamilyMemberDao {
@@ -28,9 +29,11 @@ class SqliteFamilyMemberDao implements FamilyMemberDao {
         'role': member['role']?.toString() ?? 'member',
         'relation': member['relation']?.toString() ?? '',
         'photoUrl': member['photoUrl']?.toString() ?? '',
-        'canUpload': member['canUpload'] == true ? 1 : 0,
-        'canViewExpenses': member['canViewExpenses'] == true ? 1 : 0,
+        'canUpload': member['canUpload'] == false ? 0 : 1,
+        'canViewExpenses': member['canViewExpenses'] == false ? 0 : 1,
         'canSendPushNotification': member['canSendPushNotification'] == true ? 1 : 0,
+        'canAddMembers': member['canAddMembers'] == true ? 1 : 0,
+        'canSetAlarms': member['canSetAlarms'] == false ? 0 : 1,
         'joinedAt': member['joinedAt']?.toString() ?? '',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -54,9 +57,11 @@ class SqliteFamilyMemberDao implements FamilyMemberDao {
           'role': m['role']?.toString() ?? 'member',
           'relation': m['relation']?.toString() ?? '',
           'photoUrl': m['photoUrl']?.toString() ?? '',
-          'canUpload': m['canUpload'] == true ? 1 : 0,
-          'canViewExpenses': m['canViewExpenses'] == true ? 1 : 0,
+          'canUpload': m['canUpload'] == false ? 0 : 1,
+          'canViewExpenses': m['canViewExpenses'] == false ? 0 : 1,
           'canSendPushNotification': m['canSendPushNotification'] == true ? 1 : 0,
+          'canAddMembers': m['canAddMembers'] == true ? 1 : 0,
+          'canSetAlarms': m['canSetAlarms'] == false ? 0 : 1,
           'joinedAt': m['joinedAt']?.toString() ?? '',
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -84,12 +89,39 @@ class SqliteFamilyMemberDao implements FamilyMemberDao {
         'role': row['role'],
         'relation': row['relation'],
         'photoUrl': row['photoUrl'],
-        'canUpload': row['canUpload'] == 1,
-        'canViewExpenses': row['canViewExpenses'] == 1,
+        'canUpload': row['canUpload'] != 0,
+        'canViewExpenses': row['canViewExpenses'] != 0,
         'canSendPushNotification': row['canSendPushNotification'] == 1,
+        'canAddMembers': row['canAddMembers'] == 1,
+        'canSetAlarms': row['canSetAlarms'] == null ? true : (row['canSetAlarms'] != 0),
         'joinedAt': row['joinedAt'],
       };
     }).toList();
+  }
+
+  @override
+  Future<void> updateMember(Map<String, dynamic> data, String familyId, String phone) async {
+    final db = await _appDb.database;
+    final row = <String, dynamic>{};
+    if (data.containsKey('name')) row['name'] = data['name'];
+    if (data.containsKey('role')) row['role'] = data['role'];
+    if (data.containsKey('relation')) row['relation'] = data['relation'];
+    if (data.containsKey('photoUrl')) row['photoUrl'] = data['photoUrl'];
+    if (data.containsKey('canUpload')) row['canUpload'] = data['canUpload'] == false ? 0 : 1;
+    if (data.containsKey('canViewExpenses')) row['canViewExpenses'] = data['canViewExpenses'] == false ? 0 : 1;
+    if (data.containsKey('canSendPushNotification')) row['canSendPushNotification'] = data['canSendPushNotification'] == true ? 1 : 0;
+    if (data.containsKey('canAddMembers')) row['canAddMembers'] = data['canAddMembers'] == true ? 1 : 0;
+    if (data.containsKey('canSetAlarms')) row['canSetAlarms'] = data['canSetAlarms'] == false ? 0 : 1;
+
+    if (row.isNotEmpty) {
+      await db.update(
+        'family_members',
+        row,
+        where: 'phoneNumber = ? AND familyId = ?',
+        whereArgs: [phone, familyId],
+      );
+      _changeNotifier.add(familyId);
+    }
   }
 
   @override

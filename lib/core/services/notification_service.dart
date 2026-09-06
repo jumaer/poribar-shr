@@ -46,6 +46,7 @@ class NotificationService {
   final StreamController<List<AppNotificationItem>> _controller =
       StreamController<List<AppNotificationItem>>.broadcast();
 
+  final Map<String, DateTime> _recentPushCache = {};
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _familyNotifSub;
   String? _cachedFcmToken;
   bool _isInitialized = false;
@@ -118,21 +119,70 @@ class NotificationService {
     }
   }
 
-  /// Sync user device token to Firestore
-  Future<void> syncTokenToFirestore(String userPhoneOrUid, String token) async {
+  /// Sync user device token to Firestore (both user doc and family member doc)
+  Future<void> syncTokenToFirestore(String userPhoneOrUid, String token, {String? familyId}) async {
     try {
       final clean = userPhoneOrUid.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
       await FirebaseFirestore.instance.collection('users').doc(clean).set({
         'fcmToken': token,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // Also sync to active family member record if familyId is provided or can be fetched
+      String targetFamilyId = familyId ?? '';
+      if (targetFamilyId.isEmpty) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(clean).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          targetFamilyId = userDoc.data()?['activeFamilyId']?.toString() ?? '';
+        }
+      }
+
+      if (targetFamilyId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('families')
+            .doc(targetFamilyId)
+            .collection('members')
+            .doc(clean)
+            .set({
+          'fcmToken': token,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      debugPrint('FCM Token synced to Firestore for $clean (Family: $targetFamilyId)');
     } catch (e) {
       debugPrint('Error syncing token to firestore: $e');
     }
   }
 
+  /// Get active FCM tokens of other family members
+  Future<List<String>> getOtherFamilyMemberTokens({
+    required String familyId,
+    required String excludePhone,
+  }) async {
+    try {
+      final cleanExclude = excludePhone.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
+      final snap = await FirebaseFirestore.instance
+          .collection('families')
+          .doc(familyId)
+          .collection('members')
+          .get();
+      final tokens = <String>[];
+      for (final doc in snap.docs) {
+        if (doc.id == cleanExclude) continue;
+        final token = doc.data()['fcmToken']?.toString();
+        if (token != null && token.isNotEmpty) {
+          tokens.add(token);
+        }
+      }
+      return tokens;
+    } catch (e) {
+      debugPrint('Error fetching family member tokens: $e');
+      return [];
+    }
+  }
+
   /// Stream family notifications in real-time from Firestore
-  void listenToFamilyNotifications(String familyId) {
+  void listenToFamilyNotifications(String familyId, {String? myPhone}) {
     if (familyId.isEmpty) return;
     _familyNotifSub?.cancel();
     _familyNotifSub = FirebaseFirestore.instance
@@ -148,6 +198,7 @@ class NotificationService {
         final id = doc.id;
         if (!_notifications.any((n) => n.id == id)) {
           final isMemberAlert = data['type'] == 'new_member';
+          final isSos = data['type'] == 'sos_emergency';
           final img = data['imageUrl']?.toString();
           final newItem = AppNotificationItem(
             id: id,
@@ -157,10 +208,14 @@ class NotificationService {
             time: 'এইমাত্র',
             senderName: data['memberName']?.toString() ?? data['senderName']?.toString() ?? 'পরিবার সদস্য',
             imageUrl: img,
-            icon: isMemberAlert
-                ? Icons.person_add_alt_1_rounded
-                : (img != null ? Icons.image_outlined : Icons.notifications_active_outlined),
-            iconColor: isMemberAlert ? const Color(0xFF30D158) : const Color(0xFF10B981),
+            icon: isSos
+                ? Icons.warning_amber_rounded
+                : (isMemberAlert
+                    ? Icons.person_add_alt_1_rounded
+                    : (img != null ? Icons.image_outlined : Icons.notifications_active_outlined)),
+            iconColor: isSos
+                ? const Color(0xFFFF3B30)
+                : (isMemberAlert ? const Color(0xFF30D158) : const Color(0xFF10B981)),
           );
           _notifications.insert(0, newItem);
         }
@@ -199,10 +254,13 @@ class NotificationService {
         body: '$userName: ৳ ${amount.toStringAsFixed(0)} ($purpose)',
         senderName: userName,
         receiverId: familyId,
+        familyId: familyId,
         senderIsPermitted: true,
         imageUrl: imageUrl,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('broadcastExpenseEntryNotification error: $e');
+    }
   }
 
   /// Broadcast celebratory salary notification with slip image to family
@@ -233,21 +291,36 @@ class NotificationService {
         body: '$userName এর বেতন সফলভাবে জমা হয়েছে। রসিদ/স্লিপ দেখতে ট্যাপ করুন।',
         senderName: userName,
         receiverId: familyId,
+        familyId: familyId,
         senderIsPermitted: true,
         imageUrl: imageUrl,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('broadcastSalaryCreditNotification error: $e');
+    }
   }
 
-  void sendCustomPush({
+  Future<void> sendCustomPush({
     required String title,
     required String body,
     required String senderName,
     required String receiverId,
     required bool senderIsPermitted,
+    String? familyId,
+    String? senderPhone,
     String? imageUrl,
-  }) {
+  }) async {
     if (!senderIsPermitted) return;
+
+    // Deduplication check: prevent identical push within 30 seconds
+    final pushKey = '${familyId}_${title}_$body';
+    final now = DateTime.now();
+    _recentPushCache.removeWhere((_, time) => now.difference(time).inSeconds > 30);
+    if (_recentPushCache.containsKey(pushKey)) {
+      debugPrint('Skipping duplicate push within 30s: $pushKey');
+      return;
+    }
+    _recentPushCache[pushKey] = now;
 
     final newItem = AppNotificationItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -264,6 +337,29 @@ class NotificationService {
 
     _notifications.insert(0, newItem);
     _controller.add(List.unmodifiable(_notifications));
+
+    // Save to Firestore notifications collection so other family devices receive it
+    if (familyId != null && familyId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('families')
+            .doc(familyId)
+            .collection('notifications')
+            .add({
+          'title': title,
+          'body': body,
+          'type': 'custom_push',
+          'senderName': senderName,
+          'senderPhone': senderPhone,
+          'receiverId': receiverId,
+          'imageUrl': imageUrl,
+          'createdAt': FieldValue.serverTimestamp(),
+          'time': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('Firestore write push notification error: $e');
+      }
+    }
   }
 
   void triggerAccessRevocationAlert({
@@ -301,5 +397,75 @@ class NotificationService {
 
     _notifications.insert(0, alarmNotif);
     _controller.add(List.unmodifiable(_notifications));
+  }
+
+  /// Broadcast emergency SOS shake alert with location link to family
+  Future<void> broadcastSosAlert({
+    required String familyId,
+    required String userName,
+    required String userPhone,
+    required double latitude,
+    required double longitude,
+    required String locationUrl,
+  }) async {
+    final title = '🚨 জরুরি সতর্কতা: বিপদে আছেন!';
+    final body = '$userName বিপদে আছেন এবং জরুরি সাহায্য চেয়েছেন!\nবর্তমান অবস্থান: $locationUrl';
+
+    // 1. Add locally for immediate user feedback
+    final localItem = AppNotificationItem(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      tab: NotificationTabType.messages,
+      title: title,
+      body: body,
+      time: 'এখনই',
+      senderName: userName,
+      icon: Icons.warning_amber_rounded,
+      iconColor: const Color(0xFFFF3B30),
+    );
+    _notifications.insert(0, localItem);
+    _controller.add(List.unmodifiable(_notifications));
+
+    // 2. Add to Firestore family notifications so all members receive real-time alert
+    if (familyId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('families')
+            .doc(familyId)
+            .collection('notifications')
+            .add({
+          'title': title,
+          'body': body,
+          'type': 'sos_emergency',
+          'senderName': userName,
+          'senderPhone': userPhone,
+          'latitude': latitude,
+          'longitude': longitude,
+          'locationUrl': locationUrl,
+          'createdAt': FieldValue.serverTimestamp(),
+          'time': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('Firestore broadcastSosAlert notifications error: $e');
+      }
+
+      // 3. Record in dedicated emergency sos_alerts collection
+      try {
+        await FirebaseFirestore.instance
+            .collection('families')
+            .doc(familyId)
+            .collection('sos_alerts')
+            .add({
+          'userName': userName,
+          'userPhone': userPhone,
+          'latitude': latitude,
+          'longitude': longitude,
+          'locationUrl': locationUrl,
+          'status': 'active',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('Firestore write sos_alerts error: $e');
+      }
+    }
   }
 }

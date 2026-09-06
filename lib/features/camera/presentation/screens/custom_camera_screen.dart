@@ -1,19 +1,21 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
 import '../../../../core/theme/glass_theme.dart';
 import '../../../../core/widgets/glass_button.dart';
 
-class CustomCameraScreen extends StatefulWidget {
+class CustomCameraScreen extends ConsumerStatefulWidget {
   const CustomCameraScreen({super.key});
 
   @override
-  State<CustomCameraScreen> createState() => _CustomCameraScreenState();
+  ConsumerState<CustomCameraScreen> createState() => _CustomCameraScreenState();
 }
 
-class _CustomCameraScreenState extends State<CustomCameraScreen> {
+class _CustomCameraScreenState extends ConsumerState<CustomCameraScreen> {
   final ImagePicker _picker = ImagePicker();
   Uint8List? _capturedBytes;
   String? _base64Data;
@@ -22,13 +24,14 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto trigger real camera on screen open
+    // Auto trigger camera on screen open
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _takePhoto();
     });
   }
 
   Future<void> _takePhoto() async {
+    final l10n = ref.read(appLocalizationsProvider);
     setState(() => _isProcessing = true);
     try {
       final picked = await _picker.pickImage(
@@ -48,7 +51,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ক্যামেরা খুলতে সমস্যা হয়েছে: $e'),
+            content: Text('${l10n.translate('camera_open_error')}: $e'),
             backgroundColor: AppColors.primaryRed,
           ),
         );
@@ -59,6 +62,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
   }
 
   Future<void> _pickFromGallery() async {
+    final l10n = ref.read(appLocalizationsProvider);
     setState(() => _isProcessing = true);
     try {
       final picked = await _picker.pickImage(
@@ -78,7 +82,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('গ্যালারি খুলতে সমস্যা হয়েছে: $e'),
+            content: Text('${l10n.translate('gallery_open_error')}: $e'),
             backgroundColor: AppColors.primaryRed,
           ),
         );
@@ -90,6 +94,8 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = ref.watch(appLocalizationsProvider);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -137,20 +143,25 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                                     color: AppColors.accentGreen.withValues(alpha: 0.8),
                                   ),
                                   const SizedBox(height: 14),
-                                  const Text(
-                                    'রসিদ বা ভাউচারের ছবি তুলুন',
-                                    style: TextStyle(
+                                  Text(
+                                    l10n.translate('camera_box_title'),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
                                       color: AppColors.textPrimary,
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-                                  const Text(
-                                    'ক্যামেরা বা গ্যালারি থেকে ছবি নির্বাচন করুন',
-                                    style: TextStyle(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 12,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Text(
+                                      l10n.translate('camera_box_subtitle'),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 24),
@@ -167,7 +178,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                                           ),
                                         ),
                                         icon: const Icon(Icons.camera_alt, size: 18),
-                                        label: const Text('ক্যামেরা'),
+                                        label: Text(l10n.translate('camera')),
                                       ),
                                       const SizedBox(width: 10),
                                       OutlinedButton.icon(
@@ -180,7 +191,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                                           ),
                                         ),
                                         icon: const Icon(Icons.photo_library, size: 18),
-                                        label: const Text('গ্যালারি'),
+                                        label: Text(l10n.translate('gallery')),
                                       ),
                                     ],
                                   ),
@@ -208,9 +219,9 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
-                const Text(
-                  'রসিদ ক্যামেরা স্ক্যানার',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                Text(
+                  l10n.translate('camera_scanner_title'),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 48),
               ],
@@ -225,7 +236,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                 children: [
                   Expanded(
                     child: GlassButton(
-                      text: 'পুনরায় তুলুন',
+                      text: l10n.translate('camera_retake'),
                       isRed: true,
                       icon: Icons.refresh,
                       onPressed: _takePhoto,
@@ -234,7 +245,7 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
                   const SizedBox(width: 14),
                   Expanded(
                     child: GlassButton(
-                      text: 'সংরক্ষণ করুন',
+                      text: l10n.translate('camera_save'),
                       icon: Icons.check,
                       onPressed: () => Navigator.pop(context, _base64Data),
                     ),

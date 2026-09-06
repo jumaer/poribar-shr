@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
 import '../../../../core/widgets/glass_scaffold.dart';
@@ -9,6 +8,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../camera/presentation/screens/custom_camera_screen.dart';
 import '../../../direct_chat/presentation/screens/family_chat_screen.dart';
 import '../../../family_management/presentation/screens/member_list_screen.dart';
+import '../../../family_management/presentation/screens/admin_dashboard_screen.dart';
 import '../../../notifications/presentation/screens/notification_screen.dart';
 import '../../domain/entities/expense_entity.dart';
 import '../providers/expense_provider.dart';
@@ -21,9 +21,15 @@ import '../../../family_management/presentation/widgets/invitation_banner_widget
 import '../../../auth/presentation/screens/login_screen.dart';
 import '../../../../core/widgets/global_delete_dialog.dart';
 import '../widgets/edit_expense_sheet.dart';
-import '../widgets/salary_celebration_dialog.dart';
+import 'dart:async';
 import '../../../splash/presentation/widgets/update_splash_dialog.dart';
 import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/network_status_service.dart';
+import '../../../../core/services/sos_shake_service.dart';
+import '../../../../core/widgets/sos_alert_dialog.dart';
+import '../../../namaj/presentation/screens/namaj_alarm_screen.dart';
+import '../../../amol/presentation/screens/amol_screen.dart';
+import '../widgets/salary_celebration_dialog.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -35,10 +41,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final List<Map<String, String>> _problemList = [];
   final TextEditingController _problemInputCtrl = TextEditingController();
+  StreamSubscription<SosTriggerEvent>? _sosSub;
 
   @override
   void initState() {
     super.initState();
+    _sosSub = SosShakeService().onSosTriggered.listen((event) {
+      if (mounted) {
+        SosAlertDialog.show(context, event);
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = ref.read(authUserProvider);
       if (user != null) {
@@ -46,6 +59,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         NotificationService().initializeNotificationEngine(userIdOrPhone: id);
         if (user.activeFamilyId.isNotEmpty) {
           NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+          SosShakeService().startListening(
+            familyId: user.activeFamilyId,
+            userName: user.fullName,
+            userPhone: user.phoneNumber,
+          );
         }
       }
     });
@@ -53,11 +71,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
+    _sosSub?.cancel();
     _problemInputCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _refreshDashboardData() async {
+    await ref.read(networkStatusProvider.notifier).refresh();
+    await ref.read(authUserProvider.notifier).reloadUser();
+    ref.invalidate(expenseListProvider);
+    ref.invalidate(monthlyIncomeTotalProvider);
+    ref.invalidate(monthlyExpenseTotalProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('সার্ভার থেকে সমস্ত তথ্য রিফ্রেশ ও সিঙ্ক করা হয়েছে!'),
+          backgroundColor: AppColors.primaryGreen,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   void _openAddExpense() {
+    final isOnline = ref.read(networkStatusProvider);
+    if (!isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ আপনি অফলাইনে আছেন! নতুন কোনো এন্ট্রি সার্ভারে সংরক্ষণ করা সম্ভব নয়। দয়া করে ইন্টারনেট সংযোগ চালু করুন।'),
+          backgroundColor: AppColors.primaryRed,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
     AddExpenseSheet.show(context);
   }
 
@@ -275,94 +322,177 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final budgetProgress = totalIncome > 0 ? (totalExpense / totalIncome).clamp(0.0, 1.0) : 0.0;
 
+    final isOnline = ref.watch(networkStatusProvider);
+
     return GlassScaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(user, currentLang),
-                  const SizedBox(height: 12),
-                  const InvitationBannerWidget(),
-                  const SizedBox(height: 4),
-                  _buildFinancialSummaryCard(totalSavings, totalIncome, totalExpense, budgetProgress),
-                  const SizedBox(height: 12),
-                  _buildSalarySpotlightBanner(allExpenses),
-                  _buildNoticeBanner(allExpenses),
-                  const SizedBox(height: 16),
-                  _buildSegmentedControl(selectedCategory, personalSum, familySum, l10n),
-                  const SizedBox(height: 16),
-                  _buildQuickActionsRow(),
-                  const SizedBox(height: 20),
-                  const AdvancedExpenseGraphsWidget(),
-                  const SizedBox(height: 20),
-                  _buildRecentTransactionsHeader(filteredExpenses.length),
-                  const SizedBox(height: 8),
-                ],
+      body: RefreshIndicator(
+        color: AppColors.primaryGreen,
+        backgroundColor: AppColors.cardDark,
+        onRefresh: _refreshDashboardData,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(user, currentLang, isOnline, l10n),
+                    if (!isOnline) ...[
+                      Container(
+                        margin: const EdgeInsets.only(top: 8, bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.darkRed,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primaryRed),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                l10n.translate('offline_warning'),
+                                style: const TextStyle(color: Colors.white, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const SizedBox(height: 12),
+                    const InvitationBannerWidget(),
+                    const SizedBox(height: 6),
+                    _buildSosShakeBanner(l10n),
+                    const SizedBox(height: 6),
+                    _buildFinancialSummaryCard(totalSavings, totalIncome, totalExpense, budgetProgress, l10n),
+                    const SizedBox(height: 12),
+                    _buildSalarySpotlightBanner(allExpenses, l10n),
+                    _buildNoticeBanner(allExpenses, l10n),
+                    const SizedBox(height: 16),
+                    _buildSegmentedControl(selectedCategory, personalSum, familySum, l10n),
+                    const SizedBox(height: 16),
+                    _buildQuickActionsRow(l10n),
+                    const SizedBox(height: 20),
+                    const AdvancedExpenseGraphsWidget(),
+                    const SizedBox(height: 20),
+                    _buildRecentTransactionsHeader(filteredExpenses.length, l10n),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (filteredExpenses.isEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.receipt_long_outlined, color: AppColors.textMuted, size: 44),
-                      SizedBox(height: 10),
-                      Text(
-                        'কোনো এন্ট্রি পাওয়া যায়নি',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-                      ),
-                    ],
+            if (filteredExpenses.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.receipt_long_outlined, color: AppColors.textMuted, size: 44),
+                        const SizedBox(height: 10),
+                        Text(
+                          l10n.translate('no_entries_found'),
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = filteredExpenses[index];
+                      return _buildTransactionItem(item, index == filteredExpenses.length - 1, l10n);
+                    },
+                    childCount: filteredExpenses.length,
                   ),
                 ),
               ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final item = filteredExpenses[index];
-                    return _buildTransactionItem(item, index == filteredExpenses.length - 1);
-                  },
-                  childCount: filteredExpenses.length,
-                ),
-              ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 100),
             ),
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 100),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAddExpense,
-        backgroundColor: AppColors.primaryGreen,
+        backgroundColor: isOnline ? AppColors.primaryGreen : AppColors.cardDarkSecondary,
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Icon(Icons.add, color: Colors.black, size: 28),
+        tooltip: isOnline ? l10n.translate('add_expense_fab') : l10n.translate('offline_fab_disabled'),
+        child: Icon(Icons.add, color: isOnline ? Colors.black : AppColors.textSecondary, size: 28),
       ),
     );
   }
 
-  Widget _buildHeader(dynamic user, AppLanguage currentLang) {
+  void _triggerEmergencySos() {
+    final user = ref.read(authUserProvider);
+    if (user != null) {
+      SosShakeService().triggerEmergencySos(
+        familyId: user.activeFamilyId,
+        userName: user.fullName,
+        userPhone: user.phoneNumber,
+      );
+    }
+  }
+
+  void _confirmLogout(AppLocalizations l10n) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(l10n.translate('logout'), style: const TextStyle(color: AppColors.textPrimary)),
+        content: Text(l10n.translate('logout_confirm'), style: const TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.translate('cancel'), style: const TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final navigator = Navigator.of(context);
+              ref.read(authUserProvider.notifier).logout();
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            },
+            child: Text(
+              l10n.translate('logout'),
+              style: const TextStyle(color: AppColors.primaryRed, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(dynamic user, AppLanguage currentLang, bool isOnline, AppLocalizations l10n) {
+    final familyDisplayName = user?.fullName != null && user!.fullName.isNotEmpty
+        ? '${user.fullName} ${l10n.translate("family_label")}'
+        : l10n.translate('our_family');
+
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
           child: Row(
             children: [
               GestureDetector(
-                onTap: () {
-                  ref.read(appLanguageProvider.notifier).toggleLanguage();
-                },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MemberListScreen()),
+                ),
                 child: Container(
                   width: 42,
                   height: 42,
@@ -383,9 +513,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            user?.fullName != null && user!.fullName.isNotEmpty
-                                ? '${user.fullName} পরিবার'
-                                : 'আমাদের পরিবার',
+                            familyDisplayName,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: AppColors.textPrimary,
@@ -404,15 +532,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primaryGreen,
+                          decoration: BoxDecoration(
+                            color: isOnline ? AppColors.primaryGreen : AppColors.primaryRed,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'অনলাইন • ${currentLang == AppLanguage.bangla ? "বাংলা" : "English"}',
+                            '${isOnline ? l10n.translate("online") : l10n.translate("offline")} • ${currentLang == AppLanguage.bangla ? "বাংলা" : "English"}',
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                           ),
@@ -426,62 +554,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        Row(
-          children: [
-            _buildCircleIconButton(
-              icon: Icons.notifications_none_rounded,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            _buildCircleIconButton(
-              icon: Icons.chat_bubble_outline_rounded,
-              showDot: true,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FamilyChatScreen()),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            _buildCircleIconButton(
-              icon: Icons.logout_rounded,
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppColors.cardDark,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: AppColors.iosDivider),
-                    ),
-                    title: const Text('লগআউট', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
-                    content: const Text('আপনি কি আপনার একাউন্ট থেকে লগআউট করতে চান?', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('বাতিল', style: TextStyle(color: AppColors.textSecondary))),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          ref.read(authUserProvider.notifier).logout();
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            (route) => false,
-                          );
-                        },
-                        child: const Text('লগআউট', style: TextStyle(color: AppColors.primaryRed, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+        Flexible(
+          fit: FlexFit.loose,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCircleIconButton(
+                  icon: Icons.emergency_share,
+                  iconColor: AppColors.primaryRed,
+                  tooltip: l10n.translate('sos_banner_title'),
+                  onTap: _triggerEmergencySos,
+                ),
+                const SizedBox(width: 6),
+                _buildCircleIconButton(
+                  icon: Icons.refresh_rounded,
+                  tooltip: l10n.translate('refresh'),
+                  onTap: _refreshDashboardData,
+                ),
+                const SizedBox(width: 6),
+                _buildCircleIconButton(
+                  icon: Icons.notifications_none_rounded,
+                  tooltip: l10n.translate('notification'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationScreen()),
                   ),
-                );
-              },
+                ),
+                const SizedBox(width: 6),
+                _buildCircleIconButton(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  tooltip: l10n.translate('messages'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FamilyChatScreen()),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _buildCircleIconButton(
+                  icon: Icons.logout_rounded,
+                  tooltip: l10n.translate('logout'),
+                  onTap: () => _confirmLogout(l10n),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ],
     );
@@ -491,8 +610,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required IconData icon,
     required VoidCallback onTap,
     bool showDot = false,
+    String? tooltip,
+    Color? iconColor,
   }) {
-    return InkWell(
+    final btn = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -506,7 +627,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Icon(icon, color: AppColors.textPrimary, size: 20),
+            Icon(icon, color: iconColor ?? AppColors.textPrimary, size: 20),
             if (showDot)
               Positioned(
                 top: 8,
@@ -524,6 +645,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
     );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: btn);
+    }
+    return btn;
   }
 
   Widget _buildFinancialSummaryCard(
@@ -531,6 +656,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     double totalIncome,
     double totalExpense,
     double budgetProgress,
+    AppLocalizations l10n,
   ) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -545,9 +671,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'মোট সঞ্চয় / অবশিষ্ট ব্যালেন্স',
-                style: TextStyle(
+              Text(
+                l10n.translate('total_savings_remaining'),
+                style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -560,7 +686,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  '${(budgetProgress * 100).toStringAsFixed(0)}% খরচ',
+                  '${(budgetProgress * 100).toStringAsFixed(0)}% ${l10n.translate("spent_percentage")}',
                   style: TextStyle(
                     color: budgetProgress > 0.85 ? AppColors.primaryRed : AppColors.primaryGreen,
                     fontSize: 11,
@@ -612,7 +738,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('মোট আয়', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          Text(l10n.translate('total_income'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                           Text(
                             '৳ ${totalIncome.toStringAsFixed(0)}',
                             overflow: TextOverflow.ellipsis,
@@ -647,7 +773,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('মোট খরচ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                          Text(l10n.translate('total_expense'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                           Text(
                             '৳ ${totalExpense.toStringAsFixed(0)}',
                             overflow: TextOverflow.ellipsis,
@@ -670,7 +796,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildSalarySpotlightBanner(List<ExpenseEntity> allExpenses) {
+  Widget _buildSalarySpotlightBanner(List<ExpenseEntity> allExpenses, AppLocalizations l10n) {
     final salaryEntries = allExpenses.where((e) =>
         e.type == TransactionType.income &&
         (e.purpose.toLowerCase().contains('বেতন') ||
@@ -710,20 +836,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     Text(
-                      '🎉 বেতন প্রাপ্তি!',
-                      style: TextStyle(
+                      l10n.translate('salary_received'),
+                      style: const TextStyle(
                         color: Colors.amber,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Text(
-                      'চলতি মাস',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 10),
+                      l10n.translate('current_month'),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
                     ),
                   ],
                 ),
@@ -757,9 +883,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
               ),
-              child: const Text(
-                'বাজেট বণ্টন',
-                style: TextStyle(
+              child: Text(
+                l10n.translate('budget_distribution'),
+                style: const TextStyle(
                   color: Colors.amber,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
@@ -772,10 +898,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildNoticeBanner(List<ExpenseEntity> allExpenses) {
+  Widget _buildNoticeBanner(List<ExpenseEntity> allExpenses, AppLocalizations l10n) {
     final noticeText = allExpenses.isNotEmpty
-        ? 'সর্বশেষ: ${allExpenses.first.purpose} (৳ ${allExpenses.first.amount.toStringAsFixed(0)})'
-        : 'পরিবারে স্বাগতম! হিসাব সংরক্ষণ শুরু করতে নিচে + চাপুন';
+        ? '${l10n.translate("recent_prefix")}: ${allExpenses.first.purpose} (৳ ${allExpenses.first.amount.toStringAsFixed(0)})'
+        : l10n.translate('welcome_family_banner');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -793,6 +919,75 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               noticeText,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSosShakeBanner(AppLocalizations l10n) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.glassRedTint,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primaryRed.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: AppColors.primaryRed.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.vibration_rounded, color: AppColors.primaryRed, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.translate('sos_banner_title'),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l10n.translate('sos_banner_desc'),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: _triggerEmergencySos,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryRed.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.primaryRed.withValues(alpha: 0.6)),
+              ),
+              child: Text(
+                l10n.translate('sos_test_btn'),
+                style: const TextStyle(
+                  color: AppColors.primaryRed,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -877,14 +1072,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionsRow() {
+  Widget _buildQuickActionsRow(AppLocalizations l10n) {
+    final user = ref.watch(authUserProvider);
+    final isAdmin = user?.isAdmin ?? false;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
+          if (isAdmin) ...[
+            _buildQuickActionButton(
+              icon: Icons.shield_outlined,
+              label: l10n.translate('admin_panel'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           _buildQuickActionButton(
             icon: Icons.camera_alt_outlined,
-            label: 'রসিদ ক্যামেরা',
+            label: l10n.translate('receipt_camera'),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CustomCameraScreen()),
@@ -893,7 +1102,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.bar_chart_rounded,
-            label: 'হিসাব বিশ্লেষণ',
+            label: l10n.translate('analytics'),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ComparativeAnalyticsScreen()),
@@ -902,7 +1111,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.lock_outline_rounded,
-            label: 'গোপন ভল্ট',
+            label: l10n.translate('private_vault'),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PrivateVaultScreen()),
@@ -911,7 +1120,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.people_alt_outlined,
-            label: 'সদস্য তালিকা',
+            label: l10n.translate('member_list'),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const MemberListScreen()),
@@ -920,19 +1129,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.alarm_outlined,
-            label: 'মাসিক অ্যালার্ম',
-            onTap: () => AddReminderSheet.show(context),
+            label: l10n.translate('monthly_alarm'),
+            onTap: () {
+              final currentUser = ref.read(authUserProvider);
+              final canSet = (currentUser?.isAdmin ?? false) || (currentUser?.canSetAlarms ?? false);
+              if (!canSet) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(l10n.translate('alarm_permission_denied')),
+                    backgroundColor: AppColors.primaryRed,
+                  ),
+                );
+                return;
+              }
+              AddReminderSheet.show(context);
+            },
+          ),
+          const SizedBox(width: 10),
+          _buildQuickActionButton(
+            icon: Icons.mosque_outlined,
+            label: l10n.translate('namaj_alarm_title'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NamajAlarmScreen()),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _buildQuickActionButton(
+            icon: Icons.fingerprint_rounded,
+            label: l10n.translate('amol_tasbih_title'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AmolScreen()),
+            ),
           ),
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.checklist_rounded,
-            label: 'জরুরি তালিকা',
+            label: l10n.translate('emergency_list_title'),
             onTap: _showProblemListDialog,
           ),
           const SizedBox(width: 10),
           _buildQuickActionButton(
             icon: Icons.palette_outlined,
-            label: 'স্প্ল্যাশ ছবি',
+            label: l10n.translate('splash_img_title'),
             onTap: () => UpdateSplashDialog.show(context),
           ),
         ],
@@ -974,15 +1214,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentTransactionsHeader(int count) {
+  Widget _buildRecentTransactionsHeader(int count, AppLocalizations l10n) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
           children: [
-            const Text(
-              'সাম্প্রতিক লেনদেন',
-              style: TextStyle(
+            Text(
+              l10n.translate('recent_transactions'),
+              style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -1010,7 +1250,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildTransactionItem(ExpenseEntity item, bool isLast) {
+  Widget _buildTransactionItem(ExpenseEntity item, bool isLast, AppLocalizations l10n) {
     final isExpense = item.type == TransactionType.expense;
 
     return Dismissible(
@@ -1019,8 +1259,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       confirmDismiss: (direction) async {
         return await GlobalDeleteDialog.show(
           context: context,
-          title: 'লেনদেন মুছে ফেলা নিশ্চিত করুন',
-          message: 'আপনি কি নিশ্চিতভাবে এই লেনদেনটি মুছে ফেলতে চান?',
+          title: l10n.translate('delete_transaction_title'),
+          message: l10n.translate('delete_transaction_msg'),
           itemName: item.purpose,
           itemAmount: '৳ ${item.amount.toStringAsFixed(0)}',
         );
@@ -1090,7 +1330,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.recordedByUserName} • ${item.category == LedgerCategory.personal ? "ব্যক্তিগত" : "পারিবারিক"}',
+                      '${item.recordedByUserName} • ${item.category == LedgerCategory.personal ? l10n.translate("personal") : l10n.translate("family")}',
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textSecondary,

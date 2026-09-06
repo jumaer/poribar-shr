@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Shr</string>
+	<string>SRH - এসআরএইচ</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>shr</string>
+	<string>SRH</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>জরুরি অবস্থায় (SOS Shake) আপনার বর্তমান অবস্থান পরিবারের কাছে পাঠাতে লোকেশন অনুমতি প্রয়োজন।</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>জরুরি অবস্থায় আপনার বর্তমান অবস্থান পরিবারের কাছে পাঠাতে লোকেশন অনুমতি প্রয়োজন।</string>
 </dict>
 </plist>

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
 import '../../../../core/widgets/glass_button.dart';
 
-class SalaryCelebrationDialog extends StatelessWidget {
+class SalaryCelebrationDialog extends ConsumerWidget {
   final double amount;
   final String userName;
   final DateTime date;
@@ -37,7 +39,8 @@ class SalaryCelebrationDialog extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = ref.watch(appLocalizationsProvider);
     // 50/30/20 breakdown
     final essential = amount * 0.50;
     final lifestyle = amount * 0.30;
@@ -86,9 +89,9 @@ class SalaryCelebrationDialog extends StatelessWidget {
                 child: const Icon(Icons.celebration_rounded, color: Colors.white, size: 36),
               ),
               const SizedBox(height: 14),
-              const Text(
-                '🎉 আলহামদুলিল্লাহ!',
-                style: TextStyle(
+              Text(
+                l10n.translate('salary_alhamdulillah'),
+                style: const TextStyle(
                   color: Colors.amber,
                   fontWeight: FontWeight.bold,
                   fontSize: 22,
@@ -96,9 +99,9 @@ class SalaryCelebrationDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'পরিবারে নতুন বেতন জমা হয়েছে',
-                style: TextStyle(
+              Text(
+                l10n.translate('salary_celebration_subtitle'),
+                style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
@@ -127,7 +130,7 @@ class SalaryCelebrationDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'জমা করেছেন: $userName • ${date.day}/${date.month}/${date.year}',
+                      '${l10n.translate('deposited_by')}: $userName • ${date.day}/${date.month}/${date.year}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -158,10 +161,10 @@ class SalaryCelebrationDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'বেতনের রসিদ / স্টেটমেন্ট ছবি সংযুক্ত',
-                          style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
+                          l10n.translate('salary_slip_attached'),
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
@@ -170,11 +173,11 @@ class SalaryCelebrationDialog extends StatelessWidget {
               ],
               const SizedBox(height: 16),
               // Smart budget allocation guide
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'স্মার্ট পারিবারিক বাজেট বণ্টন পরামর্শ:',
-                  style: TextStyle(
+                  l10n.translate('smart_budget_advice'),
+                  style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -185,26 +188,26 @@ class SalaryCelebrationDialog extends StatelessWidget {
               _buildAllocationRow(
                 icon: Icons.shopping_cart_outlined,
                 color: const Color(0xFF3B82F6),
-                title: '৫০% নিত্যপ্রয়োজনীয় (বাজার, বিল, ভাড়া)',
+                title: l10n.translate('budget_50_essential'),
                 amount: essential,
               ),
               const SizedBox(height: 6),
               _buildAllocationRow(
                 icon: Icons.local_mall_outlined,
                 color: const Color(0xFFEC4899),
-                title: '৩০% পারিবারিক চাহিদা ও পোশাক',
+                title: l10n.translate('budget_30_lifestyle'),
                 amount: lifestyle,
               ),
               const SizedBox(height: 6),
               _buildAllocationRow(
                 icon: Icons.savings_outlined,
                 color: AppColors.primaryGreen,
-                title: '২০% জরুরি সঞ্চয় ও ডিপিএস ফান্ড',
+                title: l10n.translate('budget_20_savings'),
                 amount: savings,
               ),
               const SizedBox(height: 20),
               GlassButton(
-                text: 'আলহামদুলিল্লাহ, সম্পন্ন করুন',
+                text: l10n.translate('salary_done_btn'),
                 icon: Icons.check,
                 onPressed: () => Navigator.pop(context),
               ),

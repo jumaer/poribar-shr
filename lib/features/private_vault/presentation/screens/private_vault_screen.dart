@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
+import '../../../../core/services/firebase_dropdown_service.dart';
 import '../../../../core/widgets/glass_app_bar.dart';
 import '../../../../core/widgets/glass_button.dart';
 import '../../../../core/widgets/glass_scaffold.dart';
@@ -20,46 +22,84 @@ class PrivateVaultScreen extends ConsumerStatefulWidget {
 class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
   int _selectedTab = 0;
 
-  void _openAddItemSheet() {
+  void _openAddItemSheet(AppLocalizations l10n, List<String> categories) {
     final titleCtrl = TextEditingController();
     final contentCtrl = TextEditingController();
-    String category = _selectedTab == 0 ? 'গোপন আইটেম' : 'ব্যক্তিগত মেহমান';
+    String selectedCategory = categories.isNotEmpty
+        ? (_selectedTab == 0 ? categories.first : (categories.length > 1 ? categories[1] : categories.first))
+        : (_selectedTab == 0 ? l10n.translate('vault_hidden_items') : l10n.translate('vault_guest_items'));
 
     GlobalBottomSheet.show(
       context: context,
-      title: 'ব্যক্তিগত ভল্টে নোট যোগ করুন',
-      child: Column(
-        children: [
-          GlassTextField(
-            controller: titleCtrl,
-            label: 'নোটের শিরোনাম',
-            hint: 'যেমন: টাকার অবস্থান বা চাবি',
-            prefixIcon: CupertinoIcons.lock_shield,
-          ),
-          const SizedBox(height: 10),
-          GlassTextField(
-            controller: contentCtrl,
-            label: 'গোপন বিবরণ',
-            hint: 'বিস্তারিত বিবরণ লিখুন...',
-            maxLines: 3,
-            prefixIcon: CupertinoIcons.doc_text,
-          ),
-          const SizedBox(height: 14),
-          GlassButton(
-            text: 'নিরাপদে সংরক্ষণ করুন',
-            icon: CupertinoIcons.lock_fill,
-            onPressed: () {
-              if (titleCtrl.text.isNotEmpty && contentCtrl.text.isNotEmpty) {
-                ref.read(privateVaultProvider.notifier).addItem(
-                      titleCtrl.text.trim(),
-                      contentCtrl.text.trim(),
-                      category,
-                    );
-                Navigator.pop(context);
-              }
-            },
-          ),
-        ],
+      title: l10n.translate('vault_add_note_title'),
+      child: StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (categories.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardDark,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.iosDivider),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: categories.contains(selectedCategory) ? selectedCategory : categories.first,
+                      dropdownColor: AppColors.cardDark,
+                      icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
+                      isExpanded: true,
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      items: categories.map((cat) {
+                        return DropdownMenuItem<String>(
+                          value: cat,
+                          child: Text(cat),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setSheetState(() => selectedCategory = val);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              GlassTextField(
+                controller: titleCtrl,
+                label: l10n.translate('vault_note_title_label'),
+                hint: l10n.translate('vault_note_title_hint'),
+                prefixIcon: CupertinoIcons.lock_shield,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: contentCtrl,
+                label: l10n.translate('vault_note_desc_label'),
+                hint: l10n.translate('vault_note_desc_hint'),
+                maxLines: 3,
+                prefixIcon: CupertinoIcons.doc_text,
+              ),
+              const SizedBox(height: 14),
+              GlassButton(
+                text: l10n.translate('vault_save_btn'),
+                icon: CupertinoIcons.lock_fill,
+                onPressed: () {
+                  if (titleCtrl.text.isNotEmpty && contentCtrl.text.isNotEmpty) {
+                    ref.read(privateVaultProvider.notifier).addItem(
+                          titleCtrl.text.trim(),
+                          contentCtrl.text.trim(),
+                          selectedCategory,
+                        );
+                    Navigator.pop(context);
+                  }
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -67,6 +107,10 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
   @override
   Widget build(BuildContext context) {
     final allItems = ref.watch(privateVaultProvider);
+    final l10n = ref.watch(appLocalizationsProvider);
+    final dropdownConfigAsync = ref.watch(dropdownOptionsProvider);
+    final dropdownConfig = dropdownConfigAsync.value ?? DropdownConfigModel.defaults;
+    final vaultCats = dropdownConfig.vaultCategories;
 
     final hiddenItems = allItems.where((i) => i.category.contains('Hidden') || i.category.contains('গোপন')).toList();
     final guestItems = allItems.where((i) => i.category.contains('Guests') || i.category.contains('মেহমান')).toList();
@@ -74,16 +118,16 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
 
     return GlassScaffold(
       appBar: GlassAppBar(
-        title: 'আমার গোপন ভল্ট',
+        title: l10n.translate('private_vault_appbar'),
         actions: [
           IconButton(
             icon: const Icon(CupertinoIcons.chat_bubble_text_fill, color: AppColors.accentGreen, size: 20),
-            tooltip: 'সরাসরি বার্তা পাঠান (৩টি/দিন)',
+            tooltip: l10n.translate('direct_msg_tooltip'),
             onPressed: () => RateLimitedPingSheet.show(context),
           ),
           IconButton(
             icon: const Icon(CupertinoIcons.plus_circle_fill, color: AppColors.accentGreen, size: 22),
-            onPressed: _openAddItemSheet,
+            onPressed: () => _openAddItemSheet(l10n, vaultCats),
           ),
         ],
       ),
@@ -97,26 +141,26 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.iosDivider),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(CupertinoIcons.lock_shield_fill, color: AppColors.primaryGreen, size: 24),
-                SizedBox(width: 12),
+                const Icon(CupertinoIcons.lock_shield_fill, color: AppColors.primaryGreen, size: 24),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'জিরো-নলেজ ব্যক্তিগত ভল্ট',
-                        style: TextStyle(
+                        l10n.translate('zero_knowledge_vault'),
+                        style: const TextStyle(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'এই তথ্য সম্পূর্ণ এনক্রিপ্টেড। পরিবারের এডমিন বা অন্য কোনো সদস্যের এই সেকশনে কোনো অ্যাক্সেস নেই।',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
+                        l10n.translate('zero_knowledge_desc'),
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, height: 1.3),
                       ),
                     ],
                   ),
@@ -147,7 +191,7 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'লুকানো জিনিস (${hiddenItems.length})',
+                        '${l10n.translate("vault_hidden_items")} (${hiddenItems.length})',
                         style: TextStyle(
                           color: _selectedTab == 0 ? Colors.white : AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -169,7 +213,7 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'ব্যক্তিগত মেহমান (${guestItems.length})',
+                        '${l10n.translate("vault_guest_items")} (${guestItems.length})',
                         style: TextStyle(
                           color: _selectedTab == 1 ? Colors.white : AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -193,8 +237,8 @@ class _PrivateVaultScreenState extends ConsumerState<PrivateVaultScreen> {
                   const SizedBox(height: 10),
                   Text(
                     _selectedTab == 0
-                        ? 'কোনো গোপন জিনিস সংরক্ষিত নেই'
-                        : 'কোনো ব্যক্তিগত মেহমানের নোট নেই',
+                        ? l10n.translate('vault_no_hidden_items')
+                        : l10n.translate('vault_no_guest_items'),
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 ],

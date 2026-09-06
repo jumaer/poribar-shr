@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/family_firestore_datasource.dart';
 
@@ -17,6 +18,7 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = ref.watch(appLocalizationsProvider);
     final currentUser = ref.watch(authUserProvider);
     if (currentUser == null || currentUser.phoneNumber.isEmpty) {
       return const SizedBox.shrink();
@@ -32,11 +34,15 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
 
         final invite = invitations.first;
         final inviteId = invite['id']?.toString() ?? '';
-        final familyName = invite['familyName']?.toString() ?? 'একটি পরিবার';
-        final fromAdmin = invite['fromAdminName']?.toString() ?? 'পরিবার এডমিন';
+        final familyName = invite['familyName']?.toString() ?? l10n.translate('invitation_default_family');
+        final fromAdmin = invite['fromAdminName']?.toString() ?? l10n.translate('invitation_default_admin');
         final newFamilyId = invite['familyId']?.toString() ?? '';
         final role = invite['role']?.toString() ?? 'member';
-        final relation = invite['relation']?.toString() ?? 'সদস্য';
+        final relation = invite['relation']?.toString() ?? l10n.translate('invitation_default_role');
+
+        final inviteBodyText = l10n.language == AppLanguage.bangla
+            ? '$fromAdmin আপনাকে "$familyName"-এ $relation হিসেবে যোগদানের অনুরোধ জানিয়েছেন। গ্রহণ করলে আপনি এই পরিবারের সদস্য হবেন।'
+            : '$fromAdmin invited you to join "$familyName" as $relation. Accepting will add you to this family.';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -60,10 +66,10 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                     child: const Icon(Icons.mail_outline_rounded, color: AppColors.primaryGreen, size: 20),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'পরিবারে যোগদানের নতুন আমন্ত্রণ!',
-                      style: TextStyle(
+                      l10n.translate('invitation_new_title'),
+                      style: const TextStyle(
                         color: AppColors.primaryGreen,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
@@ -74,7 +80,7 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
               ),
               const SizedBox(height: 10),
               Text(
-                '$fromAdmin আপনাকে "$familyName"-এ $relation হিসেবে যোগদানের অনুরোধ জানিয়েছেন। গ্রহণ করলে আপনি এই পরিবারের সদস্য হবেন।',
+                inviteBodyText,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, height: 1.3),
               ),
               const SizedBox(height: 14),
@@ -110,7 +116,11 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('আপনি সফলভাবে $familyName-এ যুক্ত হয়েছেন!'),
+                                      content: Text(
+                                        l10n.language == AppLanguage.bangla
+                                            ? 'আপনি সফলভাবে $familyName-এ যুক্ত হয়েছেন!'
+                                            : 'You successfully joined $familyName!',
+                                      ),
                                       backgroundColor: AppColors.primaryGreen,
                                     ),
                                   );
@@ -119,7 +129,7 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('আমন্ত্রণ গ্রহণ করা সম্ভব হয়নি: $e'),
+                                      content: Text('${l10n.translate('invitation_accept_failed')}: $e'),
                                       backgroundColor: AppColors.primaryRed,
                                     ),
                                   );
@@ -128,7 +138,10 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                                 if (mounted) setState(() => _isProcessing = false);
                               }
                             },
-                      child: const Text('গ্রহণ করুন', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        l10n.translate('invitation_accept'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -148,8 +161,8 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                                 await _datasource.rejectFamilyInvitation(inviteId);
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('আমন্ত্রণ প্রত্যাখ্যান করা হয়েছে।'),
+                                    SnackBar(
+                                      content: Text(l10n.translate('invitation_rejected_msg')),
                                     ),
                                   );
                                 }
@@ -157,7 +170,7 @@ class _InvitationBannerWidgetState extends ConsumerState<InvitationBannerWidget>
                                 if (mounted) setState(() => _isProcessing = false);
                               }
                             },
-                      child: const Text('প্রত্যাখ্যান করুন'),
+                      child: Text(l10n.translate('invitation_reject')),
                     ),
                   ),
                 ],

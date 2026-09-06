@@ -75,8 +75,10 @@ class FamilyFirestoreDatasource {
     await _cacheUserLocally(data);
     try {
       await _firestore.collection('users').doc(cleanPhone).set(data, SetOptions(merge: true));
+      debugPrint('Firestore saveUser successful for: $cleanPhone');
     } catch (e) {
-      debugPrint('Firestore save user offline queued: $e');
+      debugPrint('Firestore save user error: $e');
+      rethrow;
     }
   }
 
@@ -84,7 +86,11 @@ class FamilyFirestoreDatasource {
     final familyId = familyData['id'] as String;
     try {
       await _firestore.collection('families').doc(familyId).set(familyData, SetOptions(merge: true));
-    } catch (_) {}
+      debugPrint('Firestore createFamily successful: $familyId');
+    } catch (e) {
+      debugPrint('Firestore createFamily error: $e');
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>?> getFamily(String familyId) async {
@@ -93,7 +99,9 @@ class FamilyFirestoreDatasource {
       if (doc.exists && doc.data() != null) {
         return doc.data();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Firestore getFamily error: $e');
+    }
     return null;
   }
 
@@ -116,6 +124,7 @@ class FamilyFirestoreDatasource {
         yield list;
       }
     } catch (e) {
+      debugPrint('Firestore streamFamilyMembers error (falling back to SQLite): $e');
       // Offline fallback: keep streaming from SQLite
       yield* AppDatabase().familyMemberDao.watchAll(familyId);
     }
@@ -131,7 +140,8 @@ class FamilyFirestoreDatasource {
       final list = snap.docs.map((d) => d.data()).toList();
       await AppDatabase().familyMemberDao.insertAll(list, familyId);
       return list;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Firestore getFamilyMembersOnce error (reading SQLite): $e');
       return await AppDatabase().familyMemberDao.findAll(familyId);
     }
   }
@@ -148,14 +158,26 @@ class FamilyFirestoreDatasource {
           .doc(phone)
           .set(memberData, SetOptions(merge: true));
 
-      await _firestore.collection('users').doc(phone).set({
+      final userDocUpdate = <String, dynamic>{
+        'uid': memberData['id'] ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
+        'phoneNumber': phone,
         'activeFamilyId': familyId,
         'joinedFamilyIds': FieldValue.arrayUnion([familyId]),
         'role': memberData['role'] ?? 'member',
+        'relation': memberData['relation'] ?? 'সদস্য',
         'fullName': memberData['name'] ?? '',
         'photoUrl': memberData['photoUrl'],
-      }, SetOptions(merge: true));
-    } catch (_) {}
+      };
+      if (memberData['password'] != null && memberData['password'].toString().isNotEmpty) {
+        userDocUpdate['password'] = memberData['password'];
+      }
+
+      await _firestore.collection('users').doc(phone).set(userDocUpdate, SetOptions(merge: true));
+      debugPrint('Firestore addMemberToFamily successful for: $phone in family $familyId');
+    } catch (e) {
+      debugPrint('Firestore addMemberToFamily error: $e');
+      rethrow;
+    }
 
     final memberName = memberData['name'] ?? 'নতুন সদস্য';
     final relation = memberData['relation'] ?? 'সদস্য';
@@ -184,6 +206,60 @@ class FamilyFirestoreDatasource {
         senderIsPermitted: true,
       );
     } catch (_) {}
+  }
+
+  Future<void> updateMemberPermissionsAndRelation({
+    required String familyId,
+    required String memberPhone,
+    required Map<String, dynamic> updates,
+  }) async {
+    final cleanPhone = _sanitizePhone(memberPhone);
+
+    // 1. Update SQLite local cache immediately
+    await AppDatabase().familyMemberDao.updateMember(updates, familyId, cleanPhone);
+
+    // 2. Update Firestore member document
+    try {
+      await _firestore
+          .collection('families')
+          .doc(familyId)
+          .collection('members')
+          .doc(cleanPhone)
+          .set(updates, SetOptions(merge: true));
+
+      final userDocUpdates = <String, dynamic>{};
+      if (updates.containsKey('role')) userDocUpdates['role'] = updates['role'];
+      if (updates.containsKey('relation')) userDocUpdates['relation'] = updates['relation'];
+      if (updates.containsKey('canAddMembers')) userDocUpdates['canAddMembers'] = updates['canAddMembers'];
+      if (updates.containsKey('canSetAlarms')) userDocUpdates['canSetAlarms'] = updates['canSetAlarms'];
+      if (updates.containsKey('canSendPushNotification')) userDocUpdates['canSendPushNotification'] = updates['canSendPushNotification'];
+      if (updates.containsKey('canViewExpenses')) userDocUpdates['canViewExpenses'] = updates['canViewExpenses'];
+      if (updates.containsKey('canUpload')) userDocUpdates['canUpload'] = updates['canUpload'];
+
+      if (userDocUpdates.isNotEmpty) {
+        await _firestore
+            .collection('users')
+            .doc(cleanPhone)
+            .set(userDocUpdates, SetOptions(merge: true));
+      }
+
+      // 3. Send notification regarding permission updates
+      await _firestore
+          .collection('families')
+          .doc(familyId)
+          .collection('notifications')
+          .add({
+        'title': 'অনুমতি ও প্রোফাইল আপডেট 🛡️',
+        'body': 'অ্যাডমিন আপনার অনুমতি বা পারিবারিক সম্পর্ক আপডেট করেছেন।',
+        'type': 'permission_update',
+        'memberPhone': cleanPhone,
+        'createdAt': FieldValue.serverTimestamp(),
+        'time': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('Firestore updateMemberPermissionsAndRelation error: $e');
+      rethrow;
+    }
   }
 
   Future<void> removeMemberFromFamily(String familyId, String phone) async {

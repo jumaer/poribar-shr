@@ -41,17 +41,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       );
     });
 
-    Future.delayed(const Duration(milliseconds: 2000), () {
+    Future.delayed(const Duration(milliseconds: 1800), () async {
       if (mounted) {
-        final user = ref.read(authUserProvider);
-        if (user != null && user.activeFamilyId.isNotEmpty) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const DashboardScreen()),
-          );
-        } else {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-          );
+        final loggedIn = await ref.read(authUserProvider.notifier).tryAutoLogin();
+        if (mounted) {
+          final user = ref.read(authUserProvider);
+          if (loggedIn && user != null && user.activeFamilyId.isNotEmpty) {
+            NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const DashboardScreen()),
+            );
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          }
         }
       }
     });

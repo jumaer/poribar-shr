@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../../../core/database/transaction_dao.dart';
 import '../../../../core/database/transaction_db_entity.dart';
 import '../../domain/entities/expense_entity.dart';
@@ -29,7 +30,11 @@ class RoomSyncedExpenseRepository {
 
     try {
       await remoteDatasource.saveExpenseToFirestore(expense);
-    } catch (_) {}
+      debugPrint('Expense saved to Firestore successfully: ${expense.id} (family: ${expense.familyId})');
+    } catch (e) {
+      debugPrint('Firestore saveExpense error: $e');
+      rethrow;
+    }
   }
 
   Future<void> deleteExpense(String expenseId, String familyId) async {
@@ -40,12 +45,16 @@ class RoomSyncedExpenseRepository {
         familyId: familyId,
         expenseId: expenseId,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Firestore deleteExpense error: $e');
+      rethrow;
+    }
   }
 
   void _startBackgroundRemoteSync(String familyId) {
     _remoteSubscription?.cancel();
     _remoteSubscription = remoteDatasource.streamExpenses(familyId).listen((remoteExpenses) async {
+      debugPrint('Firestore sync: received ${remoteExpenses.length} remote expenses for family $familyId');
       final dbEntities = remoteExpenses.map((e) {
         final model = ExpenseModel.fromEntity(e);
         return TransactionDbEntity(
@@ -66,7 +75,7 @@ class RoomSyncedExpenseRepository {
 
       await localDao.insertAll(dbEntities);
     }, onError: (err) {
-      // Graceful offline fallback: keep streaming from local SQLite database
+      debugPrint('Firestore streamExpenses error (falling back to SQLite): $err');
     });
   }
 

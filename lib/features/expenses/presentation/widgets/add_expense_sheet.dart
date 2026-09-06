@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/firestore_image_service.dart';
+import '../../../../core/services/network_status_service.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/widgets/glass_button.dart';
 import '../../../../core/widgets/glass_text_field.dart';
@@ -110,10 +111,10 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final activeLedgerScope = ref.watch(selectedLedgerCategoryProvider);
     final categories = ref.watch(categoryListProvider);
     final user = ref.watch(authUserProvider);
     final isAdmin = user?.role == 'admin' || user?.isFamilyOwner == true;
+    final isOnline = ref.watch(networkStatusProvider);
 
     _selectedCategory ??= categories.first;
 
@@ -125,6 +126,28 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!isOnline)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primaryRed.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.primaryRed.withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.wifi_off_rounded, color: AppColors.primaryRed, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'আপনি অফলাইনে আছেন। ক্লাউড ডাটাবেসের অখণ্ডতা বজায় রাখতে অফলাইনে কোনো এন্ট্রি নেওয়া হয় না। অনুগ্রহ করে ইন্টারনেট সংযোগ চালু করুন।',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
@@ -329,15 +352,28 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
         ],
         const SizedBox(height: 18),
         GlassButton(
-          text: _type == TransactionType.expense
-              ? 'খরচ জমা দিন'
-              : (_type == TransactionType.income
-                  ? 'আয় জমা দিন'
-                  : 'সঞ্চয় জমা দিন'),
+          text: !isOnline
+              ? 'অফলাইনে এন্ট্রি বন্ধ'
+              : (_type == TransactionType.expense
+                  ? 'খরচ জমা দিন'
+                  : (_type == TransactionType.income
+                      ? 'আয় জমা দিন'
+                      : 'সঞ্চয় জমা দিন')),
           isRed: isRedTheme,
-          icon: Icons.check_circle_outline,
-          onPressed: () async {
-            final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+          icon: !isOnline ? Icons.cloud_off_rounded : Icons.check_circle_outline,
+          onPressed: !isOnline
+              ? null
+              : () async {
+                  if (!NetworkStatusService().isOnline) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('অফলাইন মোডে নতুন এন্ট্রি বা লেনদেন যোগ করা সম্ভব নয়। দয়া করে ইন্টারনেট সংযোগ চালু করুন।'),
+                        backgroundColor: AppColors.primaryRed,
+                      ),
+                    );
+                    return;
+                  }
+                  final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
             if (amount > 0) {
               final purposeText = _purposeController.text.trim().isEmpty
                   ? (_selectedCategory?.nameBn ?? 'সাধারণ')
@@ -358,53 +394,64 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 imagePath = await FirestoreImageService.saveImageToFirestore(_attachedImageBase64!);
               }
 
-              ref.read(expenseListProvider.notifier).addExpense(
-                    ExpenseEntity(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      familyId: familyId,
-                      type: _type,
-                      category: activeLedgerScope,
-                      amount: amount,
-                      purpose: purposeText,
-                      description: _descriptionController.text.trim(),
-                      date: _selectedDate,
-                      recordedByUserId: userId,
-                      recordedByUserName: userName,
-                      imageUrl: imagePath,
+              try {
+                await ref.read(expenseListProvider.notifier).addExpense(
+                      ExpenseEntity(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        familyId: familyId,
+                        type: _type,
+                        category: LedgerCategory.family,
+                        amount: amount,
+                        purpose: purposeText,
+                        description: _descriptionController.text.trim(),
+                        date: _selectedDate,
+                        recordedByUserId: userId,
+                        recordedByUserName: userName,
+                        imageUrl: imagePath,
+                      ),
+                    );
+
+                if (isSalary) {
+                  // Broadcast celebratory salary arrival notification with voucher/slip image
+                  NotificationService().broadcastSalaryCreditNotification(
+                    familyId: familyId,
+                    userName: userName,
+                    amount: amount,
+                    imageUrl: imagePath,
+                  );
+                } else {
+                  // Broadcast regular push notification with image to all family members
+                  NotificationService().broadcastExpenseEntryNotification(
+                    familyId: familyId,
+                    userName: userName,
+                    purpose: purposeText,
+                    amount: amount,
+                    imageUrl: imagePath,
+                  );
+                }
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+
+                if (isSalary && context.mounted) {
+                  SalaryCelebrationDialog.show(
+                    context,
+                    amount: amount,
+                    userName: userName,
+                    date: _selectedDate,
+                    slipImageBase64: _attachedImageBase64,
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('ক্লাউড ডাটাবেসে সেভ করতে ব্যর্থ: $e'),
+                      backgroundColor: AppColors.primaryRed,
                     ),
                   );
-
-              if (isSalary) {
-                // Broadcast celebratory salary arrival notification with voucher/slip image
-                NotificationService().broadcastSalaryCreditNotification(
-                  familyId: familyId,
-                  userName: userName,
-                  amount: amount,
-                  imageUrl: imagePath,
-                );
-              } else {
-                // Broadcast regular push notification with image to all family members
-                NotificationService().broadcastExpenseEntryNotification(
-                  familyId: familyId,
-                  userName: userName,
-                  purpose: purposeText,
-                  amount: amount,
-                  imageUrl: imagePath,
-                );
-              }
-
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-
-              if (isSalary && context.mounted) {
-                SalaryCelebrationDialog.show(
-                  context,
-                  amount: amount,
-                  userName: userName,
-                  date: _selectedDate,
-                  slipImageBase64: _attachedImageBase64,
-                );
+                }
               }
             }
           },

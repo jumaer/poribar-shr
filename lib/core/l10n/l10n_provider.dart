@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_localizations.dart';
+export 'app_localizations.dart';
 
 class AppLanguageNotifier extends Notifier<AppLanguage> {
   @override
