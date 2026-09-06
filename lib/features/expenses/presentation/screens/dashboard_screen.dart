@@ -58,7 +58,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final id = user.phoneNumber.isNotEmpty ? user.phoneNumber : user.activeFamilyId;
         NotificationService().initializeNotificationEngine(userIdOrPhone: id);
         if (user.activeFamilyId.isNotEmpty) {
-          NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+          NotificationService().listenToFamilyNotifications(user.activeFamilyId, myPhone: user.phoneNumber);
           SosShakeService().startListening(
             familyId: user.activeFamilyId,
             userName: user.fullName,

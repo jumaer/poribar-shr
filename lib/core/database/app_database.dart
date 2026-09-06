@@ -50,6 +50,21 @@ class AppDatabase {
     return _appSettingsDao!;
   }
 
+  /// Clears all local SQLite tables (cache, session, transactions, offline members)
+  Future<void> clearAllLocalData() async {
+    final db = await database;
+    await db.delete('transactions');
+    await db.delete('categories');
+    await db.delete('family_members');
+    await db.delete('private_vault');
+    await db.delete('users');
+    await db.delete('app_settings');
+    try {
+      await db.delete('amols');
+      await db.delete('prayer_alarms');
+    } catch (_) {}
+  }
+
   Future<Database> _initDatabase() async {
     final databasesPath = await getDatabasesPath();
     final path = p.join(databasesPath, 'shr_family_offline.db');

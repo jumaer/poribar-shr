@@ -184,6 +184,7 @@ class NotificationService {
   /// Stream family notifications in real-time from Firestore
   void listenToFamilyNotifications(String familyId, {String? myPhone}) {
     if (familyId.isEmpty) return;
+    final cleanMyPhone = myPhone?.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '') ?? '';
     _familyNotifSub?.cancel();
     _familyNotifSub = FirebaseFirestore.instance
         .collection('families')
@@ -196,17 +197,38 @@ class NotificationService {
       for (final doc in snap.docs) {
         final data = doc.data();
         final id = doc.id;
+        final senderPhone = (data['senderPhone']?.toString() ?? data['memberPhone']?.toString() ?? '')
+            .replaceAll(RegExp(r'\s+'), '')
+            .replaceAll('-', '');
+
+        // If notification is a new_member alert for this user himself, skip it
+        if (data['type'] == 'new_member' && cleanMyPhone.isNotEmpty && senderPhone == cleanMyPhone) {
+          continue;
+        }
+
         if (!_notifications.any((n) => n.id == id)) {
           final isMemberAlert = data['type'] == 'new_member';
           final isSos = data['type'] == 'sos_emergency';
+          final isSentByMe = cleanMyPhone.isNotEmpty && senderPhone == cleanMyPhone;
           final img = data['imageUrl']?.toString();
+
+          final title = isSos && isSentByMe
+              ? '🚨 আপনি জরুরি সতর্কতা (SOS) পাঠিয়েছেন'
+              : (data['title']?.toString() ?? 'পারিবারিক আপডেট');
+
+          final body = isSos && isSentByMe
+              ? 'পরিবার সদস্যদের কাছে আপনার জরুরি সংকেত ও অবস্থান পাঠানো হয়েছে।'
+              : (data['body']?.toString() ?? '');
+
           final newItem = AppNotificationItem(
             id: id,
             tab: isMemberAlert ? NotificationTabType.activity : NotificationTabType.messages,
-            title: data['title']?.toString() ?? 'পারিবারিক আপডেট',
-            body: data['body']?.toString() ?? '',
+            title: title,
+            body: body,
             time: 'এইমাত্র',
-            senderName: data['memberName']?.toString() ?? data['senderName']?.toString() ?? 'পরিবার সদস্য',
+            senderName: isSentByMe
+                ? 'আপনি'
+                : (data['memberName']?.toString() ?? data['senderName']?.toString() ?? 'পরিবার সদস্য'),
             imageUrl: img,
             icon: isSos
                 ? Icons.warning_amber_rounded
@@ -411,24 +433,10 @@ class NotificationService {
     final title = '🚨 জরুরি সতর্কতা: বিপদে আছেন!';
     final body = '$userName বিপদে আছেন এবং জরুরি সাহায্য চেয়েছেন!\nবর্তমান অবস্থান: $locationUrl';
 
-    // 1. Add locally for immediate user feedback
-    final localItem = AppNotificationItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      tab: NotificationTabType.messages,
-      title: title,
-      body: body,
-      time: 'এখনই',
-      senderName: userName,
-      icon: Icons.warning_amber_rounded,
-      iconColor: const Color(0xFFFF3B30),
-    );
-    _notifications.insert(0, localItem);
-    _controller.add(List.unmodifiable(_notifications));
-
-    // 2. Add to Firestore family notifications so all members receive real-time alert
+    // 1. Add to Firestore family notifications so all other members receive real-time alert
     if (familyId.isNotEmpty) {
       try {
-        await FirebaseFirestore.instance
+        final docRef = await FirebaseFirestore.instance
             .collection('families')
             .doc(familyId)
             .collection('notifications')
@@ -444,6 +452,22 @@ class NotificationService {
           'createdAt': FieldValue.serverTimestamp(),
           'time': DateTime.now().toIso8601String(),
         });
+
+        // Add local confirmation card using the same docRef ID so it never duplicates
+        final localItem = AppNotificationItem(
+          id: docRef.id,
+          tab: NotificationTabType.messages,
+          title: '🚨 আপনি জরুরি সতর্কতা (SOS) পাঠিয়েছেন',
+          body: 'পরিবার সদস্যদের কাছে আপনার জরুরি সংকেত ও অবস্থান পাঠানো হয়েছে।\n$locationUrl',
+          time: 'এইমাত্র',
+          senderName: 'আপনি',
+          icon: Icons.warning_amber_rounded,
+          iconColor: const Color(0xFFFF3B30),
+        );
+        if (!_notifications.any((n) => n.id == docRef.id)) {
+          _notifications.insert(0, localItem);
+          _controller.add(List.unmodifiable(_notifications));
+        }
       } catch (e) {
         debugPrint('Firestore broadcastSosAlert notifications error: $e');
       }

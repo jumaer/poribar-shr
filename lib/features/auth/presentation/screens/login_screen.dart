@@ -70,7 +70,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         try {
           await NotificationService().initializeNotificationEngine(userIdOrPhone: phone);
           if (user?.activeFamilyId != null && user!.activeFamilyId.isNotEmpty) {
-            NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+            NotificationService().listenToFamilyNotifications(user.activeFamilyId, myPhone: phone);
             if (NotificationService().cachedFcmToken != null) {
               await NotificationService().syncTokenToFirestore(
                 phone,

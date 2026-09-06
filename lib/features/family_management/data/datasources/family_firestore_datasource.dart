@@ -181,31 +181,35 @@ class FamilyFirestoreDatasource {
 
     final memberName = memberData['name'] ?? 'নতুন সদস্য';
     final relation = memberData['relation'] ?? 'সদস্য';
+    final isFamilyHead = memberData['role'] == 'admin' && (relation == 'পরিবার প্রধান' || relation == 'Family Head');
 
-    // Automatically send push notification to all other family members
-    try {
-      await _firestore
-          .collection('families')
-          .doc(familyId)
-          .collection('notifications')
-          .add({
-        'title': 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
-        'body': '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
-        'type': 'new_member',
-        'memberName': memberName,
-        'memberPhone': phone,
-        'createdAt': FieldValue.serverTimestamp(),
-        'time': DateTime.now().toIso8601String(),
-      });
+    // Automatically send push notification to all other family members when a new member joins
+    // (do not generate notification when family owner/creator first creates the family)
+    if (!isFamilyHead) {
+      try {
+        await _firestore
+            .collection('families')
+            .doc(familyId)
+            .collection('notifications')
+            .add({
+          'title': 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
+          'body': '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
+          'type': 'new_member',
+          'memberName': memberName,
+          'memberPhone': phone,
+          'createdAt': FieldValue.serverTimestamp(),
+          'time': DateTime.now().toIso8601String(),
+        });
 
-      NotificationService().sendCustomPush(
-        title: 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
-        body: '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
-        senderName: 'সিস্টেম',
-        receiverId: familyId,
-        senderIsPermitted: true,
-      );
-    } catch (_) {}
+        NotificationService().sendCustomPush(
+          title: 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
+          body: '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
+          senderName: 'সিস্টেম',
+          receiverId: familyId,
+          senderIsPermitted: true,
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> updateMemberPermissionsAndRelation({

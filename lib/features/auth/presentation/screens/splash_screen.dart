@@ -47,7 +47,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         if (mounted) {
           final user = ref.read(authUserProvider);
           if (loggedIn && user != null && user.activeFamilyId.isNotEmpty) {
-            NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+            NotificationService().listenToFamilyNotifications(user.activeFamilyId, myPhone: user.phoneNumber);
             NotificationService().initializeNotificationEngine(
               userIdOrPhone: user.phoneNumber,
             );
