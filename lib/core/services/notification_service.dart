@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 enum NotificationTabType { messages, offers, paymentsDue, activity }
 
@@ -35,12 +36,37 @@ class AppNotificationItem {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('FCM Background message received: ${message.messageId}');
+  final notification = message.notification;
+  if (notification != null) {
+    try {
+      final localNotif = FlutterLocalNotificationsPlugin();
+      const androidDetails = AndroidNotificationDetails(
+        'srh_family_channel',
+        'SRH পারিবারিক নোটিফিকেশন',
+        channelDescription: 'জরুরি সতর্কতা, আয়-ব্যয়, ঋণ ও পারিবারিক আপডেট',
+        importance: Importance.max,
+        priority: Priority.high,
+        enableVibration: true,
+        playSound: true,
+      );
+      const details = NotificationDetails(android: androidDetails);
+      await localNotif.show(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        title: notification.title ?? 'SRH নোটিফিকেশন',
+        body: notification.body ?? '',
+        notificationDetails: details,
+      );
+    } catch (_) {}
+  }
 }
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
 
   final List<AppNotificationItem> _notifications = [];
   final StreamController<List<AppNotificationItem>> _controller =
@@ -55,12 +81,37 @@ class NotificationService {
   List<AppNotificationItem> get currentNotifications => List.unmodifiable(_notifications);
   String? get cachedFcmToken => _cachedFcmToken;
 
-  /// Initializes runtime notification permissions and fetches FCM Token
+  /// Initializes runtime notification permissions, FlutterLocalNotifications, and fetches FCM Token
   Future<void> initializeNotificationEngine({String? userIdOrPhone}) async {
     try {
+      // 1. Setup Flutter Local Notifications
+      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosInit = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+      await _localNotifications.initialize(settings: initSettings);
+
+      final androidPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'srh_family_channel',
+            'SRH পারিবারিক নোটিফিকেশন',
+            description: 'জরুরি সতর্কতা, আয়-ব্যয়, ঋণ ও পারিবারিক আপডেট',
+            importance: Importance.max,
+            playSound: true,
+            enableVibration: true,
+          ),
+        );
+      }
+
       final messaging = FirebaseMessaging.instance;
 
-      // Android 13+ (API 33+) & iOS runtime notification permission request
+      // 2. Android 13+ & iOS runtime notification permission request
       final settings = await messaging.requestPermission(
         alert: true,
         announcement: false,
@@ -112,10 +163,54 @@ class NotificationService {
           );
           _notifications.insert(0, item);
           _controller.add(List.unmodifiable(_notifications));
+
+          // Also pop status-bar heads-up alert via local notifications
+          showLocalNotification(
+            id: message.messageId.hashCode,
+            title: notification.title ?? 'SRH নোটিফিকেশন',
+            body: notification.body ?? '',
+          );
         }
       });
     } catch (e) {
       debugPrint('Notification engine init error: $e');
+    }
+  }
+
+  /// Show a real system tray / heads-up notification on the device
+  Future<void> showLocalNotification({
+    int? id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'srh_family_channel',
+        'SRH পারিবারিক নোটিফিকেশন',
+        channelDescription: 'জরুরি সতর্কতা, আয়-ব্যয়, ঋণ ও পারিবারিক আপডেট',
+        importance: Importance.max,
+        priority: Priority.high,
+        enableVibration: true,
+        playSound: true,
+        icon: '@mipmap/ic_launcher',
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+      final notifId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      await _localNotifications.show(
+        id: notifId,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('Error showing local notification: $e');
     }
   }
 
@@ -240,6 +335,15 @@ class NotificationService {
                 : (isMemberAlert ? const Color(0xFF30D158) : const Color(0xFF10B981)),
           );
           _notifications.insert(0, newItem);
+
+          // Pop real device status bar alert with sound & vibration if from another family member
+          if (!isSentByMe) {
+            showLocalNotification(
+              id: id.hashCode,
+              title: title,
+              body: body,
+            );
+          }
         }
       }
       _controller.add(List.unmodifiable(_notifications));

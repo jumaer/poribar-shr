@@ -40,10 +40,10 @@ class SosShakeService {
   DateTime? _lastShakeTimestamp;
   int _shakeCount = 0;
 
-  // Sensitivity settings
-  static const double _shakeThreshold = 18.0; // Acceleration magnitude in m/s^2
-  static const int _shakeCountRequired = 3;   // Shakes needed within time window
-  static const Duration _shakeWindow = Duration(milliseconds: 1400);
+  // Sensitivity settings: tuned for reliable hand-shake detection
+  static const double _shakeThreshold = 12.5; // Acceleration magnitude in m/s^2
+  static const int _shakeCountRequired = 2;   // 2 quick shakes to trigger
+  static const Duration _shakeWindow = Duration(milliseconds: 1800);
   static const Duration _cooldown = Duration(seconds: 10);
   DateTime? _lastSosTriggeredTime;
 

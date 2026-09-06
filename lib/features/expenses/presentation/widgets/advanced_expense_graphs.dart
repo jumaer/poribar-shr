@@ -150,9 +150,12 @@ class _AdvancedExpenseGraphsWidgetState
   }
 
   Widget _buildLineChart(dynamic l10n) {
-    final allExpenses = ref.watch(expenseListProvider);
+    final expenses = ref.watch(currentFilteredExpensesProvider);
 
-    if (allExpenses.isEmpty) {
+    final monthExpenses = expenses.where((e) =>
+        e.date.year == _currentMonth.year && e.date.month == _currentMonth.month).toList();
+
+    if (monthExpenses.isEmpty) {
       return Container(
         height: 160,
         alignment: Alignment.center,
@@ -178,8 +181,8 @@ class _AdvancedExpenseGraphsWidgetState
     final incomeByDay = <int, double>{};
     final expenseByDay = <int, double>{};
 
-    for (final item in allExpenses) {
-      final day = item.date.day.clamp(1, 30);
+    for (final item in monthExpenses) {
+      final day = item.date.day.clamp(1, 31);
       if (item.type == TransactionType.income) {
         incomeByDay[day] = (incomeByDay[day] ?? 0.0) + item.amount;
       } else if (item.type == TransactionType.expense) {
@@ -191,7 +194,8 @@ class _AdvancedExpenseGraphsWidgetState
     final expenseSpots = <FlSpot>[];
     double maxY = 1000.0;
 
-    for (int d = 1; d <= 30; d += 5) {
+    final daysInMonth = DateUtils.getDaysInMonth(_currentMonth.year, _currentMonth.month);
+    for (int d = 1; d <= daysInMonth; d++) {
       final inc = incomeByDay[d] ?? 0.0;
       final exp = expenseByDay[d] ?? 0.0;
       if (inc > maxY) maxY = inc;
@@ -199,7 +203,7 @@ class _AdvancedExpenseGraphsWidgetState
       incomeSpots.add(FlSpot(d.toDouble(), inc));
       expenseSpots.add(FlSpot(d.toDouble(), exp));
     }
-    maxY = (maxY * 1.25).ceilToDouble();
+    maxY = (maxY * 1.2).ceilToDouble();
 
     return Column(
       children: [
@@ -248,7 +252,7 @@ class _AdvancedExpenseGraphsWidgetState
                     reservedSize: 20,
                     interval: 5,
                     getTitlesWidget: (value, meta) {
-                      if (value == 0 || value > 30) return const SizedBox.shrink();
+                      if (value == 0 || value > daysInMonth) return const SizedBox.shrink();
                       return Text(
                         '${value.toInt()}ই',
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 9),
@@ -261,7 +265,7 @@ class _AdvancedExpenseGraphsWidgetState
               ),
               borderData: FlBorderData(show: false),
               minX: 1,
-              maxX: 30,
+              maxX: daysInMonth.toDouble(),
               minY: 0,
               maxY: maxY,
               lineTouchData: LineTouchData(
@@ -294,7 +298,7 @@ class _AdvancedExpenseGraphsWidgetState
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: AppColors.darkGreen,
+                    color: AppColors.darkGreen.withValues(alpha: 0.35),
                   ),
                 ),
                 LineChartBarData(
@@ -306,7 +310,7 @@ class _AdvancedExpenseGraphsWidgetState
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: AppColors.darkRed,
+                    color: AppColors.darkRed.withValues(alpha: 0.35),
                   ),
                 ),
               ],

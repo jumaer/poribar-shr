@@ -308,6 +308,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final totalIncome = ref.watch(monthlyIncomeTotalProvider);
     final totalExpense = ref.watch(monthlyExpenseTotalProvider);
     final totalSavings = totalIncome - totalExpense;
+    final totalLoanGiven = ref.watch(totalLoanGivenProvider);
+    final totalLoanTaken = ref.watch(totalLoanTakenProvider);
     final l10n = ref.watch(appLocalizationsProvider);
     final currentLang = ref.watch(appLanguageProvider);
     final user = ref.watch(authUserProvider);
@@ -325,6 +327,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isOnline = ref.watch(networkStatusProvider);
 
     return GlassScaffold(
+      drawer: _buildAppDrawer(context, user, currentLang, l10n),
       body: RefreshIndicator(
         color: AppColors.primaryGreen,
         backgroundColor: AppColors.cardDark,
@@ -368,7 +371,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     const SizedBox(height: 6),
                     _buildSosShakeBanner(l10n),
                     const SizedBox(height: 6),
-                    _buildFinancialSummaryCard(totalSavings, totalIncome, totalExpense, budgetProgress, l10n),
+                    _buildFinancialSummaryCard(
+                      totalSavings,
+                      totalIncome,
+                      totalExpense,
+                      totalLoanGiven,
+                      totalLoanTaken,
+                      budgetProgress,
+                      l10n,
+                    ),
                     const SizedBox(height: 12),
                     _buildSalarySpotlightBanner(allExpenses, l10n),
                     _buildNoticeBanner(allExpenses, l10n),
@@ -478,6 +489,325 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildAppDrawer(BuildContext context, dynamic user, AppLanguage currentLang, AppLocalizations l10n) {
+    final isAdmin = user?.isAdmin ?? false;
+    final userName = user?.fullName != null && user!.fullName.isNotEmpty ? user.fullName : 'ব্যবহারকারী';
+    final userPhone = user?.phoneNumber ?? '';
+    final familyId = user?.activeFamilyId ?? '';
+
+    return Drawer(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A).withValues(alpha: 0.96),
+          border: const Border(
+            right: BorderSide(color: AppColors.iosDivider, width: 1),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primaryGreen.withValues(alpha: 0.15),
+                      Colors.transparent,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: const Border(
+                    bottom: BorderSide(color: AppColors.iosDivider),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.primaryGreen, Color(0xFF059669)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'SRH',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  userName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              if (isAdmin) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.5)),
+                                  ),
+                                  child: const Text(
+                                    'Admin',
+                                    style: TextStyle(color: AppColors.primaryGreen, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            userPhone,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (familyId.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'ID: $familyId',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                  children: [
+                    _buildDrawerItem(
+                      icon: Icons.dashboard_outlined,
+                      title: l10n.translate('dashboard'),
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.people_outline_rounded,
+                      title: l10n.translate('member_list'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MemberListScreen()));
+                      },
+                    ),
+                    if (isAdmin)
+                      _buildDrawerItem(
+                        icon: Icons.admin_panel_settings_outlined,
+                        title: l10n.translate('admin_panel'),
+                        badgeColor: AppColors.primaryGreen,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminDashboardScreen()));
+                        },
+                      ),
+                    _buildDrawerItem(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: l10n.translate('messages'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const FamilyChatScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.notifications_none_rounded,
+                      title: l10n.translate('notification'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.camera_alt_outlined,
+                      title: l10n.translate('receipt_camera'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomCameraScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.insights_rounded,
+                      title: l10n.translate('analytics'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ComparativeAnalyticsScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.lock_outline_rounded,
+                      title: l10n.translate('private_vault'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivateVaultScreen()));
+                      },
+                    ),
+                    const Divider(color: AppColors.iosDivider, height: 18),
+                    _buildDrawerItem(
+                      icon: Icons.mosque_outlined,
+                      title: l10n.translate('namaj_alarm_title'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const NamajAlarmScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.fingerprint_rounded,
+                      title: l10n.translate('amol_tasbih_title'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AmolScreen()));
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.alarm_outlined,
+                      title: l10n.translate('monthly_alarm'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        final currentUser = ref.read(authUserProvider);
+                        final canSet = (currentUser?.isAdmin ?? false) || (currentUser?.canSetAlarms ?? false);
+                        if (!canSet) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.translate('alarm_permission_denied')),
+                              backgroundColor: AppColors.primaryRed,
+                            ),
+                          );
+                          return;
+                        }
+                        AddReminderSheet.show(context);
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.playlist_add_check_rounded,
+                      title: l10n.translate('emergency_list_title'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showProblemListDialog();
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.palette_outlined,
+                      title: l10n.translate('splash_img_title'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        UpdateSplashDialog.show(context);
+                      },
+                    ),
+                    const Divider(color: AppColors.iosDivider, height: 18),
+                    _buildDrawerItem(
+                      icon: Icons.language_rounded,
+                      title: currentLang == AppLanguage.bangla ? 'English এ পরিবর্তন' : 'Change to বাংলা',
+                      trailing: Text(
+                        currentLang == AppLanguage.bangla ? 'BN' : 'EN',
+                        style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold),
+                      ),
+                      onTap: () {
+                        ref.read(appLanguageProvider.notifier).toggleLanguage();
+                      },
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.logout_rounded,
+                      title: l10n.translate('logout'),
+                      textColor: AppColors.primaryRed,
+                      iconColor: AppColors.primaryRed,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _confirmLogout(l10n);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.shield_rounded, size: 14, color: AppColors.textMuted),
+                    const SizedBox(width: 6),
+                    Text(
+                      'SRH • স্মার্ট যৌথ পরিবার',
+                      style: TextStyle(
+                        color: AppColors.textMuted.withValues(alpha: 0.8),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    Color? iconColor,
+    Color? textColor,
+    Color? badgeColor,
+    Widget? trailing,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: iconColor ?? AppColors.textSecondary, size: 20),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: textColor ?? AppColors.textPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: trailing,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onTap: onTap,
+    );
+  }
+
   Widget _buildHeader(dynamic user, AppLanguage currentLang, bool isOnline, AppLocalizations l10n) {
     final familyDisplayName = user?.fullName != null && user!.fullName.isNotEmpty
         ? '${user.fullName} ${l10n.translate("family_label")}'
@@ -485,6 +815,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Row(
       children: [
+        Builder(
+          builder: (scaffoldCtx) => Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: _buildCircleIconButton(
+              icon: Icons.menu_rounded,
+              tooltip: 'মেনু ড্রয়ার',
+              onTap: () => Scaffold.of(scaffoldCtx).openDrawer(),
+            ),
+          ),
+        ),
         Expanded(
           child: Row(
             children: [
@@ -504,26 +844,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: const Icon(Icons.family_restroom, color: AppColors.primaryGreen, size: 22),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          margin: const EdgeInsets.only(right: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.6)),
+                          ),
+                          child: const Text(
+                            'SRH',
+                            style: TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
                         Flexible(
                           child: Text(
                             familyDisplayName,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: AppColors.textPrimary,
-                              fontSize: 16,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.verified, color: AppColors.primaryGreen, size: 15),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified, color: AppColors.primaryGreen, size: 14),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -655,6 +1013,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     double totalSavings,
     double totalIncome,
     double totalExpense,
+    double totalLoanGiven,
+    double totalLoanTaken,
     double budgetProgress,
     AppLocalizations l10n,
   ) {
@@ -791,6 +1151,83 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ],
           ),
+          if (totalLoanGiven > 0 || totalLoanTaken > 0) ...[
+            const SizedBox(height: 14),
+            Container(height: 1, color: AppColors.iosDivider),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.call_made_rounded, color: Colors.amber, size: 15),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(l10n.translate('loan_given'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                            Text(
+                              '৳ ${totalLoanGiven.toStringAsFixed(0)}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 26, color: AppColors.iosDivider),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.deepOrange.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.call_received_rounded, color: Colors.deepOrange, size: 15),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(l10n.translate('loan_taken'), style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                            Text(
+                              '৳ ${totalLoanTaken.toStringAsFixed(0)}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.deepOrange,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1001,13 +1438,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     double familySum,
     dynamic l10n,
   ) {
+    final isPersonal = selectedCategory == LedgerCategory.personal;
     return Container(
-      height: 44,
-      padding: const EdgeInsets.all(3),
+      height: 46,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.cardDark,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(23),
         border: Border.all(color: AppColors.iosDivider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1017,52 +1462,111 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   .read(selectedLedgerCategoryProvider.notifier)
                   .setCategory(LedgerCategory.personal),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
                 decoration: BoxDecoration(
-                  color: selectedCategory == LedgerCategory.personal
-                      ? AppColors.cardDarkSecondary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(9),
+                  gradient: isPersonal
+                      ? const LinearGradient(
+                          colors: [
+                            AppColors.primaryGreen,
+                            Color(0xFF059669),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isPersonal ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: isPersonal
+                      ? [
+                          BoxShadow(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  '${l10n.translate('my_tab')} (৳ ${personalSum.toStringAsFixed(0)})',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selectedCategory == LedgerCategory.personal
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_rounded,
+                      size: 16,
+                      color: isPersonal ? Colors.black : AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '${l10n.translate('my_tab')} (৳ ${personalSum.toStringAsFixed(0)})',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isPersonal ? Colors.black : AppColors.textSecondary,
+                          fontWeight: isPersonal ? FontWeight.w800 : FontWeight.w500,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
+          const SizedBox(width: 4),
           Expanded(
             child: GestureDetector(
               onTap: () => ref
                   .read(selectedLedgerCategoryProvider.notifier)
                   .setCategory(LedgerCategory.family),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
                 decoration: BoxDecoration(
-                  color: selectedCategory == LedgerCategory.family
-                      ? AppColors.cardDarkSecondary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(9),
+                  gradient: !isPersonal
+                      ? const LinearGradient(
+                          colors: [
+                            AppColors.primaryGreen,
+                            Color(0xFF059669),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: !isPersonal ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: !isPersonal
+                      ? [
+                          BoxShadow(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  '${l10n.translate('family_tab')} (৳ ${familySum.toStringAsFixed(0)})',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selectedCategory == LedgerCategory.family
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.group_rounded,
+                      size: 16,
+                      color: !isPersonal ? Colors.black : AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '${l10n.translate('family_tab')} (৳ ${familySum.toStringAsFixed(0)})',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: !isPersonal ? Colors.black : AppColors.textSecondary,
+                          fontWeight: !isPersonal ? FontWeight.w800 : FontWeight.w500,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1252,6 +1756,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildTransactionItem(ExpenseEntity item, bool isLast, AppLocalizations l10n) {
     final isExpense = item.type == TransactionType.expense;
+    final isIncome = item.type == TransactionType.income;
+    final isSavings = item.type == TransactionType.savings;
+    final isLoanGiven = item.type == TransactionType.loanGiven;
+
+    Color badgeBg;
+    Color badgeColor;
+    IconData badgeIcon;
+    String sign;
+    Color amountColor;
+    String typeLabel;
+
+    if (isExpense) {
+      badgeBg = AppColors.darkRed;
+      badgeColor = AppColors.primaryRed;
+      badgeIcon = Icons.shopping_bag_outlined;
+      sign = '-';
+      amountColor = AppColors.textPrimary;
+      typeLabel = l10n.translate('expense');
+    } else if (isIncome) {
+      badgeBg = AppColors.darkGreen;
+      badgeColor = AppColors.primaryGreen;
+      badgeIcon = Icons.account_balance_wallet_outlined;
+      sign = '+';
+      amountColor = AppColors.primaryGreen;
+      typeLabel = l10n.translate('income');
+    } else if (isSavings) {
+      badgeBg = Colors.teal.withValues(alpha: 0.2);
+      badgeColor = Colors.tealAccent;
+      badgeIcon = Icons.savings_outlined;
+      sign = '•';
+      amountColor = Colors.tealAccent;
+      typeLabel = l10n.translate('savings');
+    } else if (isLoanGiven) {
+      badgeBg = Colors.amber.withValues(alpha: 0.2);
+      badgeColor = Colors.amber;
+      badgeIcon = Icons.call_made_rounded;
+      sign = '→';
+      amountColor = Colors.amber;
+      typeLabel = l10n.translate('loan_given');
+    } else {
+      badgeBg = Colors.deepOrange.withValues(alpha: 0.2);
+      badgeColor = Colors.deepOrangeAccent;
+      badgeIcon = Icons.call_received_rounded;
+      sign = '←';
+      amountColor = Colors.deepOrangeAccent;
+      typeLabel = l10n.translate('loan_taken');
+    }
 
     return Dismissible(
       key: Key(item.id),
@@ -1305,12 +1856,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: isExpense ? AppColors.darkRed : AppColors.darkGreen,
+                    color: badgeBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    isExpense ? Icons.shopping_bag_outlined : Icons.account_balance_wallet_outlined,
-                    color: isExpense ? AppColors.primaryRed : AppColors.primaryGreen,
+                    badgeIcon,
+                    color: badgeColor,
                     size: 20,
                   ),
                 ),
@@ -1330,7 +1881,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.recordedByUserName} • ${item.category == LedgerCategory.personal ? l10n.translate("personal") : l10n.translate("family")}',
+                      '${item.recordedByUserName} • $typeLabel • ${item.category == LedgerCategory.personal ? l10n.translate("personal") : l10n.translate("family")}',
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textSecondary,
@@ -1342,9 +1893,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                '${isExpense ? "-" : "+"} ৳ ${item.amount.toStringAsFixed(0)}',
+                '$sign ৳ ${item.amount.toStringAsFixed(0)}',
                 style: TextStyle(
-                  color: isExpense ? AppColors.textPrimary : AppColors.primaryGreen,
+                  color: amountColor,
                   fontWeight: FontWeight.w700,
                   fontSize: 15,
                 ),

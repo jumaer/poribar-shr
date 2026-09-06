@@ -37,9 +37,16 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   TransactionType _type = TransactionType.expense;
+  LedgerCategory _categoryScope = LedgerCategory.family;
   ExpenseCategory? _selectedCategory;
   String? _attachedImageBase64;
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryScope = ref.read(selectedLedgerCategoryProvider);
+  }
 
   Future<void> _captureFromCamera() async {
     try {
@@ -148,7 +155,9 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                 ],
               ),
             ),
+          // Scope Pill: Personal vs Family
           Container(
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               color: AppColors.cardDarkSecondary,
@@ -157,10 +166,72 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
             ),
             child: Row(
               children: [
-                _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
-                _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
-                _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _categoryScope = LedgerCategory.personal),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _categoryScope == LedgerCategory.personal ? AppColors.cardDarkElevated : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        border: _categoryScope == LedgerCategory.personal ? Border.all(color: AppColors.primaryGreen) : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'আমার ব্যক্তিগত খতিয়ান',
+                        style: TextStyle(
+                          color: _categoryScope == LedgerCategory.personal ? AppColors.primaryGreen : AppColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _categoryScope = LedgerCategory.family),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _categoryScope == LedgerCategory.family ? AppColors.cardDarkElevated : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        border: _categoryScope == LedgerCategory.family ? Border.all(color: AppColors.primaryGreen) : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'পারিবারিক যৌথ খতিয়ান',
+                        style: TextStyle(
+                          color: _categoryScope == LedgerCategory.family ? AppColors.primaryGreen : AppColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
+            ),
+          ),
+          // Type Selector: Expense, Income, Savings, Loan Given, Loan Taken
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.cardDarkSecondary,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.iosDivider),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
+                  _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
+                  _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
+                  _buildTypeSegment('পাওনা (দিয়েছি)', TransactionType.loanGiven, const Color(0xFF10B981)),
+                  _buildTypeSegment('দেনা (নিয়েছি)', TransactionType.loanTaken, const Color(0xFFF59E0B)),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -400,7 +471,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                         id: DateTime.now().millisecondsSinceEpoch.toString(),
                         familyId: familyId,
                         type: _type,
-                        category: LedgerCategory.family,
+                        category: _categoryScope,
                         amount: amount,
                         purpose: purposeText,
                         description: _descriptionController.text.trim(),
@@ -463,24 +534,24 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
 
   Widget _buildTypeSegment(String title, TransactionType type, Color activeColor) {
     final isSelected = _type == type;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _type = type),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.cardDarkElevated : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            title,
-            style: TextStyle(
-              color: isSelected ? Colors.white : AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            ),
+    return GestureDetector(
+      onTap: () => setState(() => _type = type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor.withValues(alpha: 0.22) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: isSelected ? Border.all(color: activeColor.withValues(alpha: 0.7)) : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? activeColor : AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
       ),

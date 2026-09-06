@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,16 +26,52 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
   List<AmolItem> _amols = [];
   int _selectedIndex = 0;
   bool _isVibrationEnabled = true;
+  StreamSubscription<List<AmolItem>>? _templatesSub;
+  StreamSubscription<List<AmolItem>>? _customAmolsSub;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _amols = _amolService.getDefaultAmols();
+    _tabController = TabController(length: 3, vsync: this);
+    _amols = List.from(_amolService.getDefaultAmols());
+
+    // Stream templates directly from Firestore app_config/amol_templates
+    _templatesSub = _amolService.streamAmolTemplates().listen((templates) {
+      if (!mounted) return;
+      _mergeNewTemplates(templates);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(authUserProvider);
+      if (user != null && user.activeFamilyId.isNotEmpty) {
+        _customAmolsSub = _amolService
+            .streamFamilyCustomAmols(user.activeFamilyId)
+            .listen((customs) {
+          if (!mounted) return;
+          _mergeNewTemplates(customs);
+        });
+      }
+    });
+  }
+
+  void _mergeNewTemplates(List<AmolItem> incoming) {
+    setState(() {
+      for (final item in incoming) {
+        final existingIdx = _amols.indexWhere((a) => a.id == item.id);
+        if (existingIdx == -1) {
+          _amols.add(item);
+        } else {
+          final current = _amols[existingIdx];
+          _amols[existingIdx] = item.copyWith(count: current.count);
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _templatesSub?.cancel();
+    _customAmolsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -624,6 +661,333 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
     );
   }
 
+  Widget _buildAyatulKursiTab() {
+    final l10n = ref.watch(appLocalizationsProvider);
+    final ayatulKursiIdx = _amols.indexWhere((a) => a.id == 'ayatul_kursi');
+    final item = ayatulKursiIdx != -1
+        ? _amols[ayatulKursiIdx]
+        : const AmolItem(
+            id: 'ayatul_kursi',
+            nameBn: 'আয়াতুল কুরসি',
+            nameAr: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ',
+            virtue: 'কুরআনের সর্বশ্রেষ্ঠ আয়াত, হেফাজত ও বরকতের অমূল্য ঢাল',
+            count: 0,
+            target: 7,
+          );
+
+    final count = item.count;
+    final target = item.target > 0 ? item.target : 7;
+    final progress = (count / target).clamp(0.0, 1.0);
+
+    void incrementAyatulKursi() {
+      if (_isVibrationEnabled) HapticFeedback.lightImpact();
+      setState(() {
+        if (ayatulKursiIdx != -1) {
+          final updated = _amols[ayatulKursiIdx].copyWith(count: count + 1);
+          _amols[ayatulKursiIdx] = updated;
+        } else {
+          _amols.add(item.copyWith(count: count + 1));
+        }
+      });
+      _syncAmols();
+    }
+
+    void resetAyatulKursi() {
+      setState(() {
+        if (ayatulKursiIdx != -1) {
+          _amols[ayatulKursiIdx] = _amols[ayatulKursiIdx].copyWith(count: 0);
+        }
+      });
+      _syncAmols();
+    }
+
+    void setAyatulKursiTarget(int newTarget) {
+      setState(() {
+        if (ayatulKursiIdx != -1) {
+          _amols[ayatulKursiIdx] = _amols[ayatulKursiIdx].copyWith(target: newTarget);
+        }
+      });
+      _syncAmols();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primaryGreen.withValues(alpha: 0.25),
+                  AppColors.cardDarkSecondary,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: AppColors.primaryGreen, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.translate('ayatul_kursi_title'),
+                        style: const TextStyle(
+                          color: AppColors.primaryGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        l10n.translate('ayatul_kursi_desc'),
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Arabic Scripture Box
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryGreen.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'আয়াতুল কুরসি (সূরা আল-বাকারা: ২৫৫)',
+                      style: TextStyle(
+                        color: AppColors.primaryGreen,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, color: AppColors.textSecondary, size: 18),
+                      tooltip: 'আরবি ও অর্থ কপি করুন',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(
+                          text: '${l10n.translate("ayatul_kursi_arabic")}\n\n${l10n.translate("ayatul_kursi_bangla_pronunciation")}\n\n${l10n.translate("ayatul_kursi_bangla_meaning")}',
+                        ));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('আয়াতুল কুরসি সফলভাবে কপি করা হয়েছে!'),
+                            backgroundColor: AppColors.primaryGreen,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const Divider(color: AppColors.iosDivider, height: 16),
+                Text(
+                  l10n.translate('ayatul_kursi_arabic'),
+                  textAlign: TextAlign.justify,
+                  textDirection: TextDirection.rtl,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    height: 2.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardDarkSecondary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.translate('ayatul_kursi_bangla_pronunciation'),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.translate('ayatul_kursi_bangla_meaning'),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Recitation Counter Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.iosDivider),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'পাঠ সংখ্যা ও তসবিহ কাউন্টার',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: AppColors.primaryRed, size: 20),
+                      tooltip: 'কাউন্টার রিসেট',
+                      onPressed: resetAyatulKursi,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Large Interactive Circular Tap Button
+                GestureDetector(
+                  onTap: incrementAyatulKursi,
+                  child: Container(
+                    width: 170,
+                    height: 170,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          AppColors.cardDarkSecondary,
+                          AppColors.cardDark,
+                          AppColors.primaryGreen.withValues(alpha: 0.15),
+                        ],
+                      ),
+                      border: Border.all(color: AppColors.primaryGreen, width: 3.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryGreen.withValues(alpha: 0.25),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$count',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 42,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'টার্গেট: $target বার',
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text(
+                            'ট্যাপ করুন',
+                            style: TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Progress Indicator
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    backgroundColor: AppColors.cardDarkSecondary,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.primaryGreen),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${(progress * 100).toInt()}% সম্পন্ন',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                ),
+                const SizedBox(height: 12),
+
+                // Quick Target Selector
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [1, 3, 7, 11, 100].map((t) {
+                    final isSel = target == t;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text('$t বার'),
+                        selected: isSel,
+                        selectedColor: AppColors.primaryGreen,
+                        backgroundColor: AppColors.cardDarkSecondary,
+                        labelStyle: TextStyle(
+                          color: isSel ? Colors.black : AppColors.textPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        onSelected: (_) => setAyatulKursiTarget(t),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authUserProvider);
@@ -631,15 +995,16 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
 
     return GlassScaffold(
       appBar: GlassAppBar(
-        title: 'দৈনিক আমল ও ডিজিটাল তসবিহ',
+        title: 'দৈনিক আমল, তসবিহ ও আয়াতুল কুরসি',
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primaryGreen,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryGreen,
           tabs: const [
-            Tab(text: 'ডিজিটাল তসবিহ'),
-            Tab(text: 'পরিবারের আমল বোর্ড'),
+            Tab(text: 'ডিজিটাল তসবিহ', icon: Icon(Icons.touch_app_outlined, size: 18)),
+            Tab(text: 'আয়াতুল কুরসি', icon: Icon(Icons.auto_stories_outlined, size: 18)),
+            Tab(text: 'পরিবারের আমল বোর্ড', icon: Icon(Icons.leaderboard_outlined, size: 18)),
           ],
         ),
       ),
@@ -647,6 +1012,7 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
         controller: _tabController,
         children: [
           _buildDigitalTasbihTab(),
+          _buildAyatulKursiTab(),
           _buildFamilyBoardTab(familyId),
         ],
       ),

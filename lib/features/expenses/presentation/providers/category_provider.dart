@@ -222,23 +222,28 @@ class CategorySpendingSummary {
 
 final categoryAnalyticsProvider = Provider<List<CategorySpendingSummary>>((ref) {
   final categories = ref.watch(categoryListProvider);
-  final expenses = ref.watch(expenseListProvider);
+  final expenses = ref.watch(currentFilteredExpensesProvider);
 
   final totalExpense = expenses
       .where((e) => e.type == TransactionType.expense)
       .fold(0.0, (total, i) => total + i.amount);
 
-  return categories.map((cat) {
+  final matchedExpenses = <String>{};
+
+  final summaries = categories.map((cat) {
     final categoryExpenses = expenses.where((e) {
       if (e.type != TransactionType.expense) return false;
       final purposeLower = e.purpose.toLowerCase();
       final nameBnLower = cat.nameBn.toLowerCase();
       final nameEnLower = cat.nameEn.toLowerCase();
-      return purposeLower.contains(nameBnLower) ||
+      final isMatch = purposeLower.contains(nameBnLower) ||
           purposeLower.contains(nameEnLower) ||
-          (cat.id == 'cat_food' && (purposeLower.contains('বাজার') || purposeLower.contains('শাকসবজি'))) ||
-          (cat.id == 'cat_utilities' && purposeLower.contains('বিদ্যুৎ'));
-    });
+          (cat.id == 'cat_food' && (purposeLower.contains('বাজার') || purposeLower.contains('শাকসবজি') || purposeLower.contains('খাবার'))) ||
+          (cat.id == 'cat_utilities' && (purposeLower.contains('বিদ্যুৎ') || purposeLower.contains('বিল') || purposeLower.contains('গ্যাস'))) ||
+          (cat.id == 'cat_rent' && purposeLower.contains('ভাড়া'));
+      if (isMatch) matchedExpenses.add(e.id);
+      return isMatch;
+    }).toList();
 
     final catTotal = categoryExpenses.fold(0.0, (total, i) => total + i.amount);
     final percentage = totalExpense > 0 ? (catTotal / totalExpense) * 100 : 0.0;
@@ -248,6 +253,29 @@ final categoryAnalyticsProvider = Provider<List<CategorySpendingSummary>>((ref) 
       totalAmount: catTotal,
       percentage: percentage,
     );
-  }).toList()
-    ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
+  }).where((s) => s.totalAmount > 0).toList();
+
+  // Handle any remaining unmatched expenses
+  final otherTotal = expenses
+      .where((e) => e.type == TransactionType.expense && !matchedExpenses.contains(e.id))
+      .fold(0.0, (total, i) => total + i.amount);
+
+  if (otherTotal > 0) {
+    summaries.add(
+      CategorySpendingSummary(
+        category: const ExpenseCategory(
+          id: 'cat_other',
+          nameBn: 'অন্যান্য খরচ',
+          nameEn: 'Other',
+          iconCodePoint: 0xf5bb,
+          colorValue: 0xFF6B7280,
+        ),
+        totalAmount: otherTotal,
+        percentage: totalExpense > 0 ? (otherTotal / totalExpense) * 100 : 0.0,
+      ),
+    );
+  }
+
+  summaries.sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
+  return summaries;
 });

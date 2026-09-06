@@ -73,6 +73,15 @@ class RoomSyncedExpenseRepository {
         );
       }).toList();
 
+      // Reconcile deleted entries: remove any local SQLite entries that were deleted on Firestore
+      final remoteIds = remoteExpenses.map((e) => e.id).toSet();
+      final currentLocal = await localDao.findAll(familyId);
+      for (final localItem in currentLocal) {
+        if (!remoteIds.contains(localItem.id)) {
+          await localDao.deleteById(localItem.id);
+        }
+      }
+
       await localDao.insertAll(dbEntities);
     }, onError: (err) {
       debugPrint('Firestore streamExpenses error (falling back to SQLite): $err');
@@ -89,6 +98,10 @@ class RoomSyncedExpenseRepository {
       txType = TransactionType.income;
     } else if (entity.type == 'savings') {
       txType = TransactionType.savings;
+    } else if (entity.type == 'loan_given' || entity.type == 'loanGiven') {
+      txType = TransactionType.loanGiven;
+    } else if (entity.type == 'loan_taken' || entity.type == 'loanTaken') {
+      txType = TransactionType.loanTaken;
     } else {
       txType = TransactionType.expense;
     }

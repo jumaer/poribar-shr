@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/notification_service.dart';
 
 class PrayerTimeItem {
   final String id;
@@ -202,6 +203,13 @@ class PrayerTimeService {
         'settings': settings,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // 3. Trigger local notification feedback
+      NotificationService().showLocalNotification(
+        id: 9991,
+        title: 'নামাজের অ্যালার্ম আপডেট',
+        body: 'আপনার নামাজের ওয়াক্ত অ্যালার্ম সফলভাবে নির্ধারিত হয়েছে।',
+      );
     } catch (e) {
       debugPrint('Firestore savePrayerAlarmSettings error: $e');
     }

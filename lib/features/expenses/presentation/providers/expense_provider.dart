@@ -150,26 +150,52 @@ final reminderListProvider =
 final currentFilteredExpensesProvider = Provider<List<ExpenseEntity>>((ref) {
   final category = ref.watch(selectedLedgerCategoryProvider);
   final all = ref.watch(expenseListProvider);
-  return all.where((e) => e.category == category).toList();
+  final user = ref.watch(authUserProvider);
+  final myPhone = user?.phoneNumber.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '') ?? '';
+  final myUid = user?.uid ?? '';
+
+  if (category == LedgerCategory.personal) {
+    return all.where((e) {
+      final cleanRecorded = e.recordedByUserId.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
+      return e.category == LedgerCategory.personal ||
+          (myPhone.isNotEmpty && cleanRecorded == myPhone) ||
+          (myUid.isNotEmpty && e.recordedByUserId == myUid);
+    }).toList();
+  }
+  return all;
 });
 
 final monthlyIncomeTotalProvider = Provider<double>((ref) {
-  final expenses = ref.watch(expenseListProvider);
+  final expenses = ref.watch(currentFilteredExpensesProvider);
   return expenses
       .where((e) => e.type == TransactionType.income)
       .fold(0.0, (sum, item) => sum + item.amount);
 });
 
 final monthlyExpenseTotalProvider = Provider<double>((ref) {
-  final expenses = ref.watch(expenseListProvider);
+  final expenses = ref.watch(currentFilteredExpensesProvider);
   return expenses
       .where((e) => e.type == TransactionType.expense)
       .fold(0.0, (sum, item) => sum + item.amount);
 });
 
 final monthlySavingsTotalProvider = Provider<double>((ref) {
-  final expenses = ref.watch(expenseListProvider);
+  final expenses = ref.watch(currentFilteredExpensesProvider);
   return expenses
       .where((e) => e.type == TransactionType.savings)
+      .fold(0.0, (sum, item) => sum + item.amount);
+});
+
+final totalLoanGivenProvider = Provider<double>((ref) {
+  final expenses = ref.watch(currentFilteredExpensesProvider);
+  return expenses
+      .where((e) => e.type == TransactionType.loanGiven)
+      .fold(0.0, (sum, item) => sum + item.amount);
+});
+
+final totalLoanTakenProvider = Provider<double>((ref) {
+  final expenses = ref.watch(currentFilteredExpensesProvider);
+  return expenses
+      .where((e) => e.type == TransactionType.loanTaken)
       .fold(0.0, (sum, item) => sum + item.amount);
 });

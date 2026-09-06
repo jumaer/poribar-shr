@@ -215,13 +215,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'পরিবার বন্ধন',
+                'SRH',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
                 ),
               ),
               const SizedBox(height: 6),

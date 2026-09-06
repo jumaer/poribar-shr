@@ -150,7 +150,38 @@ class AmolService {
       debugPrint('New Amol template saved to Firestore: ${item.nameBn}');
     } catch (e) {
       debugPrint('Failed to save new amol template to Firestore: $e');
-      rethrow;
+    }
+  }
+
+  /// Stream family-specific custom Amols
+  Stream<List<AmolItem>> streamFamilyCustomAmols(String familyId) {
+    if (familyId.isEmpty) return Stream.value([]);
+    return _firestore
+        .collection('families')
+        .doc(familyId)
+        .collection('custom_amols')
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => AmolItem.fromMap(doc.data())).toList())
+        .handleError((e) {
+          debugPrint('streamFamilyCustomAmols error: $e');
+          return <AmolItem>[];
+        });
+  }
+
+  /// Save custom Amol to the family and global templates
+  Future<void> saveCustomFamilyAmol(String familyId, AmolItem item) async {
+    try {
+      if (familyId.isNotEmpty) {
+        await _firestore
+            .collection('families')
+            .doc(familyId)
+            .collection('custom_amols')
+            .doc(item.id)
+            .set(item.toMap(), SetOptions(merge: true));
+      }
+      await addNewAmolTemplate(item);
+    } catch (e) {
+      debugPrint('saveCustomFamilyAmol error: $e');
     }
   }
 

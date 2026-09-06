@@ -236,12 +236,17 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.iosDivider),
             ),
-            child: Row(
-              children: [
-                _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
-                _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
-                _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
+                  _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
+                  _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
+                  _buildTypeSegment('পাওনা (দিয়েছি)', TransactionType.loanGiven, const Color(0xFF10B981)),
+                  _buildTypeSegment('দেনা (নিয়েছি)', TransactionType.loanTaken, const Color(0xFFF59E0B)),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -506,24 +511,24 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
 
   Widget _buildTypeSegment(String title, TransactionType type, Color activeColor) {
     final isSelected = _type == type;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _type = type),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.cardDarkElevated : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            title,
-            style: TextStyle(
-              color: isSelected ? Colors.white : AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            ),
+    return GestureDetector(
+      onTap: () => setState(() => _type = type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor.withValues(alpha: 0.22) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: isSelected ? Border.all(color: activeColor.withValues(alpha: 0.7)) : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? activeColor : AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
       ),

@@ -38,6 +38,10 @@ class ExpenseModel extends ExpenseEntity {
       txType = TransactionType.income;
     } else if (typeStr == 'savings') {
       txType = TransactionType.savings;
+    } else if (typeStr == 'loan_given' || typeStr == 'loanGiven') {
+      txType = TransactionType.loanGiven;
+    } else if (typeStr == 'loan_taken' || typeStr == 'loanTaken') {
+      txType = TransactionType.loanTaken;
     } else {
       txType = TransactionType.expense;
     }
@@ -67,6 +71,12 @@ class ExpenseModel extends ExpenseEntity {
         break;
       case TransactionType.savings:
         typeStr = 'savings';
+        break;
+      case TransactionType.loanGiven:
+        typeStr = 'loan_given';
+        break;
+      case TransactionType.loanTaken:
+        typeStr = 'loan_taken';
         break;
       case TransactionType.expense:
         typeStr = 'expense';

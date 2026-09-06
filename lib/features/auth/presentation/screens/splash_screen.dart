@@ -131,20 +131,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
             ),
             const SizedBox(height: 24),
             const Text(
-              'পরিবার বন্ধন',
+              'SRH',
               style: TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.0,
               ),
             ),
             const SizedBox(height: 8),
             const Text(
-              'স্মার্ট যৌথ পরিবার ম্যানেজমেন্ট',
+              'স্মার্ট পারিবারিক হিসাব ও বাজেট নিয়ন্ত্রণ',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 36),

@@ -1,5 +1,5 @@
 enum LedgerCategory { personal, family }
-enum TransactionType { expense, income, savings }
+enum TransactionType { expense, income, savings, loanGiven, loanTaken }
 
 class ExpenseEntity {
   final String id;

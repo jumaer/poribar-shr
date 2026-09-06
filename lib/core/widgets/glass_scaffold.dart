@@ -6,6 +6,7 @@ class GlassScaffold extends StatelessWidget {
   final Widget body;
   final Widget? floatingActionButton;
   final Widget? bottomNavigationBar;
+  final Widget? drawer;
   final bool resizeToAvoidBottomInset;
 
   const GlassScaffold({
@@ -14,6 +15,7 @@ class GlassScaffold extends StatelessWidget {
     required this.body,
     this.floatingActionButton,
     this.bottomNavigationBar,
+    this.drawer,
     this.resizeToAvoidBottomInset = true,
   });
 
@@ -23,6 +25,7 @@ class GlassScaffold extends StatelessWidget {
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: appBar,
+      drawer: drawer,
       body: SafeArea(child: body),
       floatingActionButton: floatingActionButton,
       bottomNavigationBar: bottomNavigationBar,

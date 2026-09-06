@@ -768,6 +768,110 @@ class AppLocalizations {
       AppLanguage.bangla: 'নতুন আমল সফলভাবে ফায়ারবেসে সংরক্ষিত হয়েছে!',
       AppLanguage.english: 'New Amol saved to Firebase successfully!',
     },
+    'app_name': {
+      AppLanguage.bangla: 'SRH',
+      AppLanguage.english: 'SRH',
+    },
+    'app_tagline': {
+      AppLanguage.bangla: 'স্মার্ট পারিবারিক হিসাব ও বাজেট নিয়ন্ত্রণ',
+      AppLanguage.english: 'Smart Family Accounts & Budget Management',
+    },
+    'drawer_dashboard': {
+      AppLanguage.bangla: 'ড্যাশবোর্ড ও খতিয়ান',
+      AppLanguage.english: 'Dashboard & Ledger',
+    },
+    'drawer_members': {
+      AppLanguage.bangla: 'সদস্য ও পারমিশন',
+      AppLanguage.english: 'Members & Permissions',
+    },
+    'drawer_loans': {
+      AppLanguage.bangla: 'ধার-দেনা ও পাওনা হিসাব',
+      AppLanguage.english: 'Loans & Receivables',
+    },
+    'drawer_savings': {
+      AppLanguage.bangla: 'পারিবারিক সঞ্চয় ও তহবিল',
+      AppLanguage.english: 'Savings & Funds',
+    },
+    'drawer_namaz': {
+      AppLanguage.bangla: 'নামাজের সময় ও অ্যালার্ম',
+      AppLanguage.english: 'Prayer Times & Alarm',
+    },
+    'drawer_amol': {
+      AppLanguage.bangla: 'ডিজিটাল তাসবিহ ও আয়াতুল কুরসি',
+      AppLanguage.english: 'Digital Tasbih & Ayatul Kursi',
+    },
+    'drawer_notifications': {
+      AppLanguage.bangla: 'নোটিফিকেশন সেন্টার',
+      AppLanguage.english: 'Notification Center',
+    },
+    'drawer_vault': {
+      AppLanguage.bangla: 'প্রাইভেট ভল্ট',
+      AppLanguage.english: 'Private Vault',
+    },
+    'drawer_splash': {
+      AppLanguage.bangla: 'স্প্ল্যাশ স্ক্রিন পরিবর্তন',
+      AppLanguage.english: 'Customize Splash',
+    },
+    'drawer_language': {
+      AppLanguage.bangla: 'ভাষা (Language)',
+      AppLanguage.english: 'Language',
+    },
+    'drawer_logout': {
+      AppLanguage.bangla: 'লগআউট',
+      AppLanguage.english: 'Logout',
+    },
+    'loan_given_label': {
+      AppLanguage.bangla: 'পাওনা টাকা (দিয়েছি)',
+      AppLanguage.english: 'Receivable (Lent)',
+    },
+    'loan_taken_label': {
+      AppLanguage.bangla: 'দেনা টাকা (নিয়েছি)',
+      AppLanguage.english: 'Payable (Borrowed)',
+    },
+    'total_savings_label': {
+      AppLanguage.bangla: 'মোট সঞ্চয়',
+      AppLanguage.english: 'Total Savings',
+    },
+    'all_combined': {
+      AppLanguage.bangla: 'সম্মিলিত',
+      AppLanguage.english: 'Combined',
+    },
+    'ayatul_kursi_title': {
+      AppLanguage.bangla: 'আয়াতুল কুরসি',
+      AppLanguage.english: 'Ayatul Kursi',
+    },
+    'ayatul_kursi_desc': {
+      AppLanguage.bangla: 'কুরআনের সর্বশ্রেষ্ঠ আয়াত, হেফাজত ও বরকতের অমূল্য ঢাল',
+      AppLanguage.english: 'The greatest verse of Quran, ultimate protection & blessing',
+    },
+    'ayatul_kursi_arabic': {
+      AppLanguage.bangla: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ',
+      AppLanguage.english: 'Allahu la ilaha illa Huwa, Al-Hayyul-Qayyum. La ta\'khudhuhu sinatun wa la nawm, lahu ma fis-samawati wa ma fil-\'ard. Man dhal-ladhi yashfa\'u \'indahu illa bi-idhnihi? Ya\'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bishay\'im-min \'ilmihi illa bima sha\'a. Wasi\'a kursiyyuhus-samawati wal-\'ard, wa la ya\'uduhu hifdhuhuma wa Huwal-\'Aliyyul-\'Adheem.',
+    },
+    'ayatul_kursi_bangla_pronunciation': {
+      AppLanguage.bangla: 'উচ্চারণ: আল্লা-হু লা- ইলা-হা ইল্লা- হুওয়াল হাইয়্যুল ক্বাইয়্যূম। লা- তা’খুযুহু ছিনাতুঁও ওয়ালা- নাওম। লাহূ মা- ফিসসামা-ওয়া-তি ওয়ামা- ফিল আরদ্ব। মান যাল্লাযী ইয়াশফা‘উ ‘ইনদাহূ ইল্লা- বিইযনিহী। ইয়া‘লামু মা- বাইনা আইদীহিম ওয়ামা- খালফাহুম, ওয়ালা- ইউহীতূনা বিশাইইম মিন ‘ইলমিহী ইল্লা- বিমা- শা-আ। ওয়াসি‘আ কুরসিয়্যুহুস সামা-ওয়া-তি ওয়াল আরদ্ব, ওয়ালা- ইয়াউদুহু হিফযুহুমা- ওয়াহুওয়াল ‘আলিয়্যুল ‘আযীম।',
+      AppLanguage.english: 'Pronunciation: Allahu la ilaha illa Huwal Hayyul Qayyum...',
+    },
+    'ayatul_kursi_bangla_meaning': {
+      AppLanguage.bangla: 'অর্থ: আল্লাহ, তিনি ছাড়া কোনো সত্য উপাস্য নেই। তিনি চিরঞ্জীব, সবকিছুর ধারক। তন্দ্রা বা নিদ্রা তাঁকে স্পর্শ করে না। আসমান ও জমিনে যা কিছু আছে সব তাঁরই। কে সেই ব্যক্তি যে তাঁর অনুমতি ছাড়া তাঁর কাছে সুপারিশ করবে? তাদের সামনে ও পেছনে যা কিছু আছে তা তিনি জানেন। তিনি যা ইচ্ছা করেন তা ছাড়া তাঁর জ্ঞানের কিছুই তারা আয়ত্ত করতে পারে না। তাঁর কুরসি সমস্ত আসমান ও জমিন পরিব্যাপ্ত করে আছে। আর এই দুইয়ের রক্ষণাবেক্ষণ তাঁকে ক্লান্ত করে না। তিনি সর্বোচ্চ, মহান।',
+      AppLanguage.english: 'Meaning: Allah! There is no deity except Him, the Ever-Living, the Sustainer of existence. Neither drowsiness overtakes Him nor sleep...',
+    },
+    'filter_all': {
+      AppLanguage.bangla: 'সব লেনদেন',
+      AppLanguage.english: 'All',
+    },
+    'filter_expense': {
+      AppLanguage.bangla: 'ব্যয়',
+      AppLanguage.english: 'Expense',
+    },
+    'filter_income': {
+      AppLanguage.bangla: 'আয়',
+      AppLanguage.english: 'Income',
+    },
+    'filter_loan': {
+      AppLanguage.bangla: 'ধার-দেনা',
+      AppLanguage.english: 'Loans',
+    },
   };
 
   String translate(String key) {
