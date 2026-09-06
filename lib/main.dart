@@ -7,6 +7,8 @@ import 'core/constants/app_colors.dart';
 import 'core/services/notification_service.dart';
 import 'features/auth/presentation/screens/splash_screen.dart';
 
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -15,6 +17,10 @@ Future<void> main() async {
     );
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (_) {}
+
+  // Setup notification click routing
+  NotificationService().setupNotificationClickHandlers(rootNavigatorKey);
+
   runApp(
     const ProviderScope(
       child: MultiFamilyApp(),
@@ -28,6 +34,7 @@ class MultiFamilyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'SRH - এসআরএইচ',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -36,6 +43,10 @@ class MultiFamilyApp extends StatelessWidget {
           primary: AppColors.primaryGreen,
           secondary: AppColors.primaryRed,
           surface: AppColors.cardDark,
+        ),
+        tabBarTheme: const TabBarThemeData(
+          dividerColor: Colors.transparent,
+          dividerHeight: 0,
         ),
         fontFamily: 'Roboto',
       ),

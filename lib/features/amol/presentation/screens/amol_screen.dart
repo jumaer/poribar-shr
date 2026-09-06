@@ -998,6 +998,10 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
         title: 'দৈনিক আমল, তসবিহ ও আয়াতুল কুরসি',
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.center,
+          dividerColor: Colors.transparent,
+          dividerHeight: 0,
           labelColor: AppColors.primaryGreen,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryGreen,

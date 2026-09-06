@@ -38,7 +38,7 @@
         </activity>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="shr_high_importance_channel" />
+            android:value="srh_family_channel" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />

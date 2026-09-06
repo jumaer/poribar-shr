@@ -12,7 +12,7 @@ class PrayerTimeItem {
   final TimeOfDay endTime;
   final bool isAlarmEnabled;
   final int reminderOffsetMinutes; // 0 = on time, 5 = 5 min before, etc.
-  final String soundType; // 'adhan', 'gentle_alarm', 'vibrate'
+  final String soundType; // 'adhan', 'high_sound', 'gentle_alarm', 'vibrate'
 
   const PrayerTimeItem({
     required this.id,
@@ -26,6 +26,8 @@ class PrayerTimeItem {
   });
 
   PrayerTimeItem copyWith({
+    TimeOfDay? startTime,
+    TimeOfDay? endTime,
     bool? isAlarmEnabled,
     int? reminderOffsetMinutes,
     String? soundType,
@@ -34,8 +36,8 @@ class PrayerTimeItem {
       id: id,
       nameBn: nameBn,
       nameAr: nameAr,
-      startTime: startTime,
-      endTime: endTime,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
       isAlarmEnabled: isAlarmEnabled ?? this.isAlarmEnabled,
       reminderOffsetMinutes: reminderOffsetMinutes ?? this.reminderOffsetMinutes,
       soundType: soundType ?? this.soundType,
@@ -45,6 +47,10 @@ class PrayerTimeItem {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'startHour': startTime.hour,
+      'startMinute': startTime.minute,
+      'endHour': endTime.hour,
+      'endMinute': endTime.minute,
       'isAlarmEnabled': isAlarmEnabled ? 1 : 0,
       'reminderOffsetMinutes': reminderOffsetMinutes,
       'soundType': soundType,
@@ -59,97 +65,144 @@ class PrayerTimeService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Calculates prayer times based on the current date for Bangladesh standard timezone (BST)
+  /// Default standard prayer timings at server
+  Map<String, dynamic> getDefaultServerTimings() {
+    return {
+      'fajr': {'startHour': 4, 'startMinute': 45, 'endHour': 5, 'endMinute': 58},
+      'dhuhr': {'startHour': 12, 'startMinute': 5, 'endHour': 15, 'endMinute': 45},
+      'asr': {'startHour': 15, 'startMinute': 45, 'endHour': 18, 'endMinute': 5},
+      'maghrib': {'startHour': 18, 'startMinute': 5, 'endHour': 19, 'endMinute': 20},
+      'isha': {'startHour': 19, 'startMinute': 20, 'endHour': 23, 'endMinute': 59},
+    };
+  }
+
+  /// Stream server default prayer times from Firestore (app_config/default_prayer_times)
+  Stream<Map<String, dynamic>> streamServerDefaultPrayerTimes() {
+    try {
+      final docRef = _firestore.collection('app_config').doc('default_prayer_times');
+      return docRef.snapshots().map((snap) {
+        if (!snap.exists || snap.data() == null) {
+          _seedDefaultServerPrayerTimes(docRef);
+          return getDefaultServerTimings();
+        }
+        final timings = (snap.data()?['timings'] as Map<String, dynamic>?) ?? {};
+        if (timings.isEmpty) {
+          return getDefaultServerTimings();
+        }
+        return timings;
+      }).handleError((e) {
+        debugPrint('streamServerDefaultPrayerTimes error: $e');
+        return getDefaultServerTimings();
+      });
+    } catch (e) {
+      debugPrint('streamServerDefaultPrayerTimes init error: $e');
+      return Stream.value(getDefaultServerTimings());
+    }
+  }
+
+  Future<void> _seedDefaultServerPrayerTimes(DocumentReference docRef) async {
+    try {
+      await docRef.set({
+        'timings': getDefaultServerTimings(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('Seeded default server prayer timings to app_config/default_prayer_times');
+    } catch (e) {
+      debugPrint('Error seeding default prayer timings: $e');
+    }
+  }
+
+  /// Combines server defaults with user-specific alarm & custom clock overrides
   List<PrayerTimeItem> getTodayPrayerTimes({
-    Map<String, dynamic>? alarmSettings,
+    Map<String, dynamic>? serverDefaults,
+    Map<String, dynamic>? userAlarmSettings,
   }) {
-    final now = DateTime.now();
-    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
+    final defaults = serverDefaults != null && serverDefaults.isNotEmpty
+        ? serverDefaults
+        : getDefaultServerTimings();
 
-    // Seasonal variance calculation (minutes offset based on day of year)
-    final double seasonalShift = (dayOfYear - 80) * 0.15;
-    final int shiftMinutes = seasonalShift.clamp(-20, 20).toInt();
+    final fajrDef = defaults['fajr'] as Map<String, dynamic>? ?? {};
+    final dhuhrDef = defaults['dhuhr'] as Map<String, dynamic>? ?? {};
+    final asrDef = defaults['asr'] as Map<String, dynamic>? ?? {};
+    final maghribDef = defaults['maghrib'] as Map<String, dynamic>? ?? {};
+    final ishaDef = defaults['isha'] as Map<String, dynamic>? ?? {};
 
-    final fajrHour = 4;
-    final fajrMin = (45 - (shiftMinutes ~/ 2)).clamp(10, 59);
+    final fajrUser = userAlarmSettings?['fajr'] as Map<String, dynamic>?;
+    final dhuhrUser = userAlarmSettings?['dhuhr'] as Map<String, dynamic>?;
+    final asrUser = userAlarmSettings?['asr'] as Map<String, dynamic>?;
+    final maghribUser = userAlarmSettings?['maghrib'] as Map<String, dynamic>?;
+    final ishaUser = userAlarmSettings?['isha'] as Map<String, dynamic>?;
 
-    final sunriseHour = 5;
-    final sunriseMin = (58 - (shiftMinutes ~/ 2)).clamp(10, 59);
-
-    final dhuhrHour = 12;
-    final dhuhrMin = 1 + (shiftMinutes ~/ 4);
-
-    final asrHour = 15;
-    final asrMin = (45 + (shiftMinutes ~/ 3)).clamp(15, 59);
-
-    final maghribHour = 18;
-    final maghribMin = (5 + shiftMinutes).clamp(5, 59);
-
-    final ishaHour = 19;
-    final ishaMin = (20 + shiftMinutes).clamp(15, 59);
-
-    final fajrSetting = alarmSettings?['fajr'] as Map<String, dynamic>?;
-    final dhuhrSetting = alarmSettings?['dhuhr'] as Map<String, dynamic>?;
-    final asrSetting = alarmSettings?['asr'] as Map<String, dynamic>?;
-    final maghribSetting = alarmSettings?['maghrib'] as Map<String, dynamic>?;
-    final ishaSetting = alarmSettings?['isha'] as Map<String, dynamic>?;
+    TimeOfDay parseTime(Map<String, dynamic>? userMap, Map<String, dynamic> defMap, String prefix) {
+      if (userMap != null && userMap['${prefix}Hour'] != null && userMap['${prefix}Minute'] != null) {
+        return TimeOfDay(
+          hour: userMap['${prefix}Hour'] as int,
+          minute: userMap['${prefix}Minute'] as int,
+        );
+      }
+      return TimeOfDay(
+        hour: (defMap['${prefix}Hour'] as int?) ?? 12,
+        minute: (defMap['${prefix}Minute'] as int?) ?? 0,
+      );
+    }
 
     return [
       PrayerTimeItem(
         id: 'fajr',
         nameBn: 'ফজর',
         nameAr: 'الفجر',
-        startTime: TimeOfDay(hour: fajrHour, minute: fajrMin),
-        endTime: TimeOfDay(hour: sunriseHour, minute: sunriseMin),
-        isAlarmEnabled: fajrSetting?['isAlarmEnabled'] != 0,
-        reminderOffsetMinutes: fajrSetting?['reminderOffsetMinutes'] ?? 10,
-        soundType: fajrSetting?['soundType'] ?? 'adhan',
+        startTime: parseTime(fajrUser, fajrDef, 'start'),
+        endTime: parseTime(fajrUser, fajrDef, 'end'),
+        isAlarmEnabled: fajrUser?['isAlarmEnabled'] != 0 && fajrUser?['isAlarmEnabled'] != false,
+        reminderOffsetMinutes: fajrUser?['reminderOffsetMinutes'] ?? 10,
+        soundType: fajrUser?['soundType'] ?? 'adhan',
       ),
       PrayerTimeItem(
         id: 'dhuhr',
         nameBn: 'যোহর',
         nameAr: 'الظهر',
-        startTime: TimeOfDay(hour: dhuhrHour, minute: dhuhrMin),
-        endTime: TimeOfDay(hour: asrHour, minute: asrMin),
-        isAlarmEnabled: dhuhrSetting?['isAlarmEnabled'] != 0,
-        reminderOffsetMinutes: dhuhrSetting?['reminderOffsetMinutes'] ?? 0,
-        soundType: dhuhrSetting?['soundType'] ?? 'adhan',
+        startTime: parseTime(dhuhrUser, dhuhrDef, 'start'),
+        endTime: parseTime(dhuhrUser, dhuhrDef, 'end'),
+        isAlarmEnabled: dhuhrUser?['isAlarmEnabled'] != 0 && dhuhrUser?['isAlarmEnabled'] != false,
+        reminderOffsetMinutes: dhuhrUser?['reminderOffsetMinutes'] ?? 0,
+        soundType: dhuhrUser?['soundType'] ?? 'adhan',
       ),
       PrayerTimeItem(
         id: 'asr',
         nameBn: 'আসর',
         nameAr: 'العصر',
-        startTime: TimeOfDay(hour: asrHour, minute: asrMin),
-        endTime: TimeOfDay(hour: maghribHour, minute: maghribMin),
-        isAlarmEnabled: asrSetting?['isAlarmEnabled'] != 0,
-        reminderOffsetMinutes: asrSetting?['reminderOffsetMinutes'] ?? 5,
-        soundType: asrSetting?['soundType'] ?? 'adhan',
+        startTime: parseTime(asrUser, asrDef, 'start'),
+        endTime: parseTime(asrUser, asrDef, 'end'),
+        isAlarmEnabled: asrUser?['isAlarmEnabled'] != 0 && asrUser?['isAlarmEnabled'] != false,
+        reminderOffsetMinutes: asrUser?['reminderOffsetMinutes'] ?? 5,
+        soundType: asrUser?['soundType'] ?? 'adhan',
       ),
       PrayerTimeItem(
         id: 'maghrib',
         nameBn: 'মাগরিব',
         nameAr: 'المغرب',
-        startTime: TimeOfDay(hour: maghribHour, minute: maghribMin),
-        endTime: TimeOfDay(hour: ishaHour, minute: ishaMin),
-        isAlarmEnabled: maghribSetting?['isAlarmEnabled'] != 0,
-        reminderOffsetMinutes: maghribSetting?['reminderOffsetMinutes'] ?? 0,
-        soundType: maghribSetting?['soundType'] ?? 'adhan',
+        startTime: parseTime(maghribUser, maghribDef, 'start'),
+        endTime: parseTime(maghribUser, maghribDef, 'end'),
+        isAlarmEnabled: maghribUser?['isAlarmEnabled'] != 0 && maghribUser?['isAlarmEnabled'] != false,
+        reminderOffsetMinutes: maghribUser?['reminderOffsetMinutes'] ?? 0,
+        soundType: maghribUser?['soundType'] ?? 'adhan',
       ),
       PrayerTimeItem(
         id: 'isha',
         nameBn: 'এশা ও তারাবীহ',
         nameAr: 'العشاء',
-        startTime: TimeOfDay(hour: ishaHour, minute: ishaMin),
-        endTime: const TimeOfDay(hour: 23, minute: 59),
-        isAlarmEnabled: ishaSetting?['isAlarmEnabled'] != 0,
-        reminderOffsetMinutes: ishaSetting?['reminderOffsetMinutes'] ?? 0,
-        soundType: ishaSetting?['soundType'] ?? 'adhan',
+        startTime: parseTime(ishaUser, ishaDef, 'start'),
+        endTime: parseTime(ishaUser, ishaDef, 'end'),
+        isAlarmEnabled: ishaUser?['isAlarmEnabled'] != 0 && ishaUser?['isAlarmEnabled'] != false,
+        reminderOffsetMinutes: ishaUser?['reminderOffsetMinutes'] ?? 0,
+        soundType: ishaUser?['soundType'] ?? 'adhan',
       ),
     ];
   }
 
   /// Get currently active prayer or the upcoming one
   PrayerTimeItem? getCurrentOrNextPrayer(List<PrayerTimeItem> prayers) {
+    if (prayers.isEmpty) return null;
     final now = TimeOfDay.now();
     final nowMinutes = now.hour * 60 + now.minute;
 
@@ -160,11 +213,12 @@ class PrayerTimeService {
         return p;
       }
     }
-    // If night before Fajr
+    // If before Fajr or after Isha
     return prayers.first;
   }
 
-  /// Save prayer alarm settings to Firestore and SQLite
+  /// Save user-specific prayer alarm settings to Firestore and SQLite
+  /// This changes ONLY for this user; other users continue with server defaults or their own settings
   Future<void> savePrayerAlarmSettings({
     required String familyId,
     required String phone,
@@ -182,7 +236,7 @@ class PrayerTimeService {
           {
             'waqtId': entry.key,
             'phoneNumber': cleanPhone,
-            'isAlarmEnabled': val['isAlarmEnabled'] == true ? 1 : 0,
+            'isAlarmEnabled': (val['isAlarmEnabled'] == true || val['isAlarmEnabled'] == 1) ? 1 : 0,
             'reminderOffsetMinutes': val['reminderOffsetMinutes'] ?? 0,
             'soundType': val['soundType'] ?? 'adhan',
             'updatedAt': DateTime.now().millisecondsSinceEpoch,
@@ -192,7 +246,7 @@ class PrayerTimeService {
       }
     } catch (_) {}
 
-    // 2. Save to Firestore
+    // 2. Save exclusively under this user's document
     try {
       await _firestore
           .collection('families')
@@ -204,18 +258,19 @@ class PrayerTimeService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // 3. Trigger local notification feedback
-      NotificationService().showLocalNotification(
+      // 3. Trigger feedback with high sound & strong vibration channel
+      NotificationService().showPrayerAlarmNotification(
         id: 9991,
-        title: 'নামাজের অ্যালার্ম আপডেট',
-        body: 'আপনার নামাজের ওয়াক্ত অ্যালার্ম সফলভাবে নির্ধারিত হয়েছে।',
+        title: 'নামাজের আযান ও অ্যালার্ম আপডেট',
+        body: 'আপনার কাস্টম সময় ও অ্যালার্ম সফলভাবে নির্ধারিত হয়েছে।',
+        soundType: 'high_sound',
       );
     } catch (e) {
       debugPrint('Firestore savePrayerAlarmSettings error: $e');
     }
   }
 
-  /// Stream prayer alarm settings from Firestore
+  /// Stream this specific user's prayer alarm settings from Firestore
   Stream<Map<String, dynamic>> streamPrayerAlarmSettings({
     required String familyId,
     required String phone,
