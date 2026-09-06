@@ -6,6 +6,7 @@ import '../../domain/entities/expense_category.dart';
 import '../../domain/entities/expense_entity.dart';
 import 'expense_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/services/notification_service.dart';
 
 const List<ExpenseCategory> kDefaultCategories = [
   ExpenseCategory(
@@ -14,6 +15,41 @@ const List<ExpenseCategory> kDefaultCategories = [
     nameEn: 'Rent',
     iconCodePoint: 0xf6bb,
     colorValue: 0xFFE53935,
+  ),
+  ExpenseCategory(
+    id: 'cat_emi_installment',
+    nameBn: 'ইএমআই ও কিস্তি',
+    nameEn: 'EMI & Installment',
+    iconCodePoint: 0xf518,
+    colorValue: 0xFFF59E0B,
+  ),
+  ExpenseCategory(
+    id: 'cat_electricity_bill',
+    nameBn: 'বিদ্যুৎ বিল',
+    nameEn: 'Electricity Bill',
+    iconCodePoint: 0xe868,
+    colorValue: 0xFFEAB308,
+  ),
+  ExpenseCategory(
+    id: 'cat_net_bill',
+    nameBn: 'ইন্টারনেট ও নেট বিল',
+    nameEn: 'Internet / Net Bill',
+    iconCodePoint: 0xe6c8,
+    colorValue: 0xFF06B6D4,
+  ),
+  ExpenseCategory(
+    id: 'cat_pay_to_someone',
+    nameBn: 'কাউকে পরিশোধ (দেনা)',
+    nameEn: 'Pay to Someone',
+    iconCodePoint: 0xe158,
+    colorValue: 0xFFEF4444,
+  ),
+  ExpenseCategory(
+    id: 'cat_get_by_someone',
+    nameBn: 'কারও থেকে গ্রহণ (পাওনা)',
+    nameEn: 'Get by Someone',
+    iconCodePoint: 0xe157,
+    colorValue: 0xFF10B981,
   ),
   ExpenseCategory(
     id: 'cat_food',
@@ -28,13 +64,6 @@ const List<ExpenseCategory> kDefaultCategories = [
     nameEn: 'Guest & Hosting',
     iconCodePoint: 0xf760,
     colorValue: 0xFFF59E0B,
-  ),
-  ExpenseCategory(
-    id: 'cat_utilities',
-    nameBn: 'বিদ্যুৎ ও বিল',
-    nameEn: 'Utilities',
-    iconCodePoint: 0xf518,
-    colorValue: 0xFF06B6D4,
   ),
   ExpenseCategory(
     id: 'cat_medical',
@@ -184,10 +213,20 @@ class CategoryListNotifier extends Notifier<List<ExpenseCategory>> {
         'isCustom': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Case 8: Broadcast category updated
+      final user = ref.read(authUserProvider);
+      NotificationService().broadcastCategoryUpdateNotification(
+        familyId: familyId,
+        categoryName: nameBn,
+        actionType: 'added',
+        userName: user?.fullName,
+      );
     } catch (_) {}
   }
 
   Future<void> deleteCategory(String familyId, String id) async {
+    final deletedName = state.firstWhere((c) => c.id == id, orElse: () => const ExpenseCategory(id: '', nameBn: 'খাত', nameEn: 'Category', iconCodePoint: 0, colorValue: 0)).nameBn;
     state = state.where((cat) => cat.id != id || !cat.isCustom).toList();
     await AppDatabase().categoryDao.delete(id);
     if (familyId.isNotEmpty) {
@@ -198,6 +237,15 @@ class CategoryListNotifier extends Notifier<List<ExpenseCategory>> {
             .collection('categories')
             .doc(id)
             .delete();
+
+        // Case 8: Broadcast category updated
+        final user = ref.read(authUserProvider);
+        NotificationService().broadcastCategoryUpdateNotification(
+          familyId: familyId,
+          categoryName: deletedName,
+          actionType: 'deleted',
+          userName: user?.fullName,
+        );
       } catch (_) {}
     }
   }

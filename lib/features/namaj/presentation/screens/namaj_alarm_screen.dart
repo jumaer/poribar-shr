@@ -18,6 +18,7 @@ class NamajAlarmScreen extends ConsumerStatefulWidget {
 
 class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
   final PrayerTimeService _prayerService = PrayerTimeService();
+  Map<String, dynamic> _serverDefaults = {};
   Map<String, dynamic> _alarmSettings = {};
 
   String _formatTimeOfDay(TimeOfDay time) {
@@ -26,7 +27,60 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
     return DateFormat('h:mm a').format(dt);
   }
 
-  Future<void> _updateSetting(String waqtId, {bool? enabled, int? offset, String? sound}) async {
+  /// Interactive custom clock picker allowing user to set custom azan time
+  Future<void> _openClockPicker(PrayerTimeItem prayer) async {
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: prayer.startTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.primaryGreen,
+              onPrimary: Colors.black,
+              surface: AppColors.cardDark,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: AppColors.cardDark,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            timePickerTheme: TimePickerThemeData(
+              backgroundColor: AppColors.cardDark,
+              hourMinuteColor: AppColors.cardDarkSecondary,
+              hourMinuteTextColor: AppColors.primaryGreen,
+              dayPeriodColor: AppColors.cardDarkSecondary,
+              dayPeriodTextColor: AppColors.textPrimary,
+              dialHandColor: AppColors.primaryGreen,
+              dialBackgroundColor: AppColors.cardDarkSecondary,
+              dialTextColor: AppColors.textPrimary,
+              entryModeIconColor: AppColors.primaryGreen,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedTime != null) {
+      await _updateSetting(
+        prayer.id,
+        startHour: pickedTime.hour,
+        startMinute: pickedTime.minute,
+      );
+    }
+  }
+
+  /// Updates settings strictly for this user; does not alter server default or other users' times
+  Future<void> _updateSetting(
+    String waqtId, {
+    bool? enabled,
+    int? offset,
+    String? sound,
+    int? startHour,
+    int? startMinute,
+  }) async {
     final user = ref.read(authUserProvider);
     final familyId = user?.activeFamilyId ?? 'fam_01';
     final phone = user?.phoneNumber ?? '';
@@ -40,6 +94,8 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
     if (enabled != null) current['isAlarmEnabled'] = enabled;
     if (offset != null) current['reminderOffsetMinutes'] = offset;
     if (sound != null) current['soundType'] = sound;
+    if (startHour != null) current['startHour'] = startHour;
+    if (startMinute != null) current['startMinute'] = startMinute;
 
     setState(() {
       _alarmSettings[waqtId] = current;
@@ -109,18 +165,44 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_formatTimeOfDay(prayer.startTime)} - ${_formatTimeOfDay(prayer.endTime)}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                    const SizedBox(height: 4),
+                    // Clickable custom clock picker time indicator
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _openClockPicker(prayer),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardDarkSecondary.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.access_time_rounded, color: AppColors.primaryGreen, size: 13),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                '${_formatTimeOfDay(prayer.startTime)} - ${_formatTimeOfDay(prayer.endTime)}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.edit_calendar_outlined, color: AppColors.primaryGreen, size: 12),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               CupertinoSwitch(
                 value: isEnabled,
                 activeTrackColor: AppColors.primaryGreen,
@@ -129,10 +211,12 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
             ],
           ),
           if (isEnabled) ...[
-            const Divider(color: AppColors.iosDivider, height: 20),
+            const SizedBox(height: 12),
+            // Horizontally non-overlapping responsive configuration controls
             Row(
               children: [
                 Expanded(
+                  flex: 5,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     decoration: BoxDecoration(
@@ -160,8 +244,9 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
+                  flex: 6,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                     decoration: BoxDecoration(
@@ -171,15 +256,33 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: prayer.soundType,
+                        value: (prayer.soundType == 'adhan' ||
+                                prayer.soundType == 'high_sound' ||
+                                prayer.soundType == 'gentle_alarm' ||
+                                prayer.soundType == 'vibrate')
+                            ? prayer.soundType
+                            : 'adhan',
                         isExpanded: true,
                         dropdownColor: AppColors.cardDark,
                         style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
                         icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryGreen, size: 18),
-                        items: [
-                          DropdownMenuItem(value: 'adhan', child: Text(l10n.translate('sound_adhan'))),
-                          DropdownMenuItem(value: 'gentle_alarm', child: Text(l10n.translate('sound_gentle'))),
-                          DropdownMenuItem(value: 'vibrate', child: Text(l10n.translate('sound_vibrate'))),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'adhan',
+                            child: Text('উচ্চ শব্দে আযান', overflow: TextOverflow.ellipsis),
+                          ),
+                          DropdownMenuItem(
+                            value: 'high_sound',
+                            child: Text('উচ্চ শব্দ অ্যালার্ম', overflow: TextOverflow.ellipsis),
+                          ),
+                          DropdownMenuItem(
+                            value: 'gentle_alarm',
+                            child: Text('শান্ত অ্যালার্ম', overflow: TextOverflow.ellipsis),
+                          ),
+                          DropdownMenuItem(
+                            value: 'vibrate',
+                            child: Text('শুধু ভাইব্রেশন', overflow: TextOverflow.ellipsis),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) _updateSetting(prayer.id, sound: val);
@@ -208,117 +311,145 @@ class _NamajAlarmScreenState extends ConsumerState<NamajAlarmScreen> {
         title: l10n.translate('namaj_alarm_screen_title'),
       ),
       body: StreamBuilder<Map<String, dynamic>>(
-        stream: _prayerService.streamPrayerAlarmSettings(familyId: familyId, phone: phone),
-        builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
-            _alarmSettings = snapshot.data!;
+        stream: _prayerService.streamServerDefaultPrayerTimes(),
+        builder: (context, serverSnap) {
+          if (serverSnap.hasData && serverSnap.data != null && serverSnap.data!.isNotEmpty) {
+            _serverDefaults = serverSnap.data!;
           }
 
-          final prayers = _prayerService.getTodayPrayerTimes(alarmSettings: _alarmSettings);
-          final currentPrayer = _prayerService.getCurrentOrNextPrayer(prayers);
+          return StreamBuilder<Map<String, dynamic>>(
+            stream: _prayerService.streamPrayerAlarmSettings(familyId: familyId, phone: phone),
+            builder: (context, userSnap) {
+              if (userSnap.hasData && userSnap.data != null && userSnap.data!.isNotEmpty) {
+                _alarmSettings = userSnap.data!;
+              }
 
-          return ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            children: [
-              // Header Card: Current Waqt
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primaryGreen.withValues(alpha: 0.25),
-                      AppColors.cardDark,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              final prayers = _prayerService.getTodayPrayerTimes(
+                serverDefaults: _serverDefaults,
+                userAlarmSettings: _alarmSettings,
+              );
+              final currentPrayer = _prayerService.getCurrentOrNextPrayer(prayers);
+
+              return ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                children: [
+                  // Header Card: Current Waqt
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primaryGreen.withValues(alpha: 0.25),
+                          AppColors.cardDark,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Icon(Icons.mosque_outlined, color: AppColors.primaryGreen, size: 22),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.translate('today_waqt'),
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                            Row(
+                              children: [
+                                const Icon(Icons.mosque_outlined, color: AppColors.primaryGreen, size: 22),
+                                const SizedBox(width: 8),
+                                Text(
+                                  l10n.translate('today_waqt'),
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.primaryGreen),
+                              ),
+                              child: Text(
+                                l10n.translate('live_update'),
+                                style: const TextStyle(color: AppColors.primaryGreen, fontSize: 10, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.primaryGreen),
+                        const SizedBox(height: 12),
+                        if (currentPrayer != null) ...[
+                          Text(
+                            '${l10n.translate('currently_running')}: ${currentPrayer.nameBn} (${currentPrayer.nameAr})',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          child: Text(
-                            l10n.translate('live_update'),
-                            style: const TextStyle(color: AppColors.primaryGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${l10n.translate('time_duration')}: ${_formatTimeOfDay(currentPrayer.startTime)} - ${_formatTimeOfDay(currentPrayer.endTime)}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Sahri & Iftar Quick Card: Non-overlapping responsive layout
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardDarkSecondary.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.iosDivider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.wb_twilight_outlined, color: Colors.amberAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  l10n.translate('sahri_iftar_header'),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    '${l10n.translate('sahri_ends')}: ${_formatTimeOfDay(prayers.first.startTime)} | ${l10n.translate('iftar_starts')}: ${_formatTimeOfDay(prayers[3].startTime)}',
+                                    style: const TextStyle(color: AppColors.primaryGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    if (currentPrayer != null) ...[
-                      Text(
-                        '${l10n.translate('currently_running')}: ${currentPrayer.nameBn} (${currentPrayer.nameAr})',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${l10n.translate('time_duration')}: ${_formatTimeOfDay(currentPrayer.startTime)} - ${_formatTimeOfDay(currentPrayer.endTime)}',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 16),
 
-              // Sahri & Iftar Quick Card
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.cardDarkSecondary.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.iosDivider),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.wb_twilight_outlined, color: Colors.amberAccent, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      l10n.translate('sahri_iftar_header'),
-                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${l10n.translate('sahri_ends')}: ${_formatTimeOfDay(prayers.first.startTime)} | ${l10n.translate('iftar_starts')}: ${_formatTimeOfDay(prayers[3].startTime)}',
-                      style: const TextStyle(color: AppColors.primaryGreen, fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Five Prayers List
-              ...prayers.map(_buildPrayerCard),
-            ],
+                  // Five Prayers List
+                  ...prayers.map(_buildPrayerCard),
+                ],
+              );
+            },
           );
         },
       ),

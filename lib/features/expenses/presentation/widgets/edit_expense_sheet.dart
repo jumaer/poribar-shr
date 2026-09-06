@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/widgets/glass_button.dart';
 import '../../../../core/widgets/glass_text_field.dart';
 import '../../../../core/widgets/global_bottom_sheet.dart';
@@ -190,6 +192,17 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
               purposeText.toLowerCase().contains('salary'));
 
       ref.read(expenseListProvider.notifier).addExpense(updated);
+
+      // Case 4: Broadcast entry update notification to other family members
+      final user = ref.read(authUserProvider);
+      NotificationService().broadcastExpenseUpdateNotification(
+        familyId: widget.expense.familyId,
+        userName: user?.fullName ?? widget.expense.recordedByUserName,
+        purpose: purposeText,
+        amount: amount,
+        imageUrl: imagePath,
+      );
+
       if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,6 +230,7 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
     final categories = ref.watch(categoryListProvider);
     final user = ref.watch(authUserProvider);
     final isAdmin = user?.role == 'admin' || user?.isFamilyOwner == true;
+    final l10n = ref.watch(appLocalizationsProvider);
 
     _selectedCategory ??= categories.firstWhere(
       (c) => widget.expense.purpose.contains(c.nameBn),
@@ -240,11 +254,11 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
-                  _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
-                  _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
-                  _buildTypeSegment('পাওনা (দিয়েছি)', TransactionType.loanGiven, const Color(0xFF10B981)),
-                  _buildTypeSegment('দেনা (নিয়েছি)', TransactionType.loanTaken, const Color(0xFFF59E0B)),
+                  _buildTypeSegment(l10n.translate('tab_expense'), TransactionType.expense, AppColors.primaryRed),
+                  _buildTypeSegment(l10n.translate('tab_income'), TransactionType.income, AppColors.primaryGreen),
+                  _buildTypeSegment(l10n.translate('tab_savings'), TransactionType.savings, AppColors.primaryBlue),
+                  _buildTypeSegment(l10n.translate('loan_given'), TransactionType.loanGiven, const Color(0xFF10B981)),
+                  _buildTypeSegment(l10n.translate('loan_taken'), TransactionType.loanTaken, const Color(0xFFF59E0B)),
                 ],
               ),
             ),

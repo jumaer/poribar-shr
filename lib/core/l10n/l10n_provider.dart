@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,3 +84,9 @@ final appLocalizationsProvider = Provider<AppLocalizations>((ref) {
   final lang = ref.watch(appLanguageProvider);
   return AppLocalizations(lang);
 });
+
+final appLocaleProvider = Provider<Locale>((ref) {
+  final lang = ref.watch(appLanguageProvider);
+  return lang == AppLanguage.english ? const Locale('en') : const Locale('bn');
+});
+

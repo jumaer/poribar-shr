@@ -858,23 +858,285 @@ class AppLocalizations {
     },
     'filter_all': {
       AppLanguage.bangla: 'সব লেনদেন',
-      AppLanguage.english: 'All',
+      AppLanguage.english: 'All Transactions',
     },
     'filter_expense': {
-      AppLanguage.bangla: 'ব্যয়',
+      AppLanguage.bangla: 'ব্যয়',
       AppLanguage.english: 'Expense',
     },
     'filter_income': {
-      AppLanguage.bangla: 'আয়',
+      AppLanguage.bangla: 'আয়',
       AppLanguage.english: 'Income',
     },
     'filter_loan': {
       AppLanguage.bangla: 'ধার-দেনা',
       AppLanguage.english: 'Loans',
     },
+    // Core financial categories & types
+    'emi_installment': {
+      AppLanguage.bangla: 'ইএমআই ও কিস্তি',
+      AppLanguage.english: 'EMI & Installment',
+    },
+    'rent': {
+      AppLanguage.bangla: 'বাড়ি ভাড়া',
+      AppLanguage.english: 'House Rent',
+    },
+    'electricity_bill': {
+      AppLanguage.bangla: 'বিদ্যুৎ বিল',
+      AppLanguage.english: 'Electricity Bill',
+    },
+    'net_bill': {
+      AppLanguage.bangla: 'ইন্টারনেট ও নেট বিল',
+      AppLanguage.english: 'Internet / Net Bill',
+    },
+    'pay_to_someone': {
+      AppLanguage.bangla: 'কাউকে পরিশোধ (দেনা)',
+      AppLanguage.english: 'Pay to Someone (Payable)',
+    },
+    'get_by_someone': {
+      AppLanguage.bangla: 'কারও থেকে গ্রহণ (পাওনা)',
+      AppLanguage.english: 'Received from Someone (Receivable)',
+    },
+    'custom_category': {
+      AppLanguage.bangla: 'কাস্টম খাত',
+      AppLanguage.english: 'Custom Category',
+    },
+    'add_custom_category': {
+      AppLanguage.bangla: 'নতুন কাস্টম খাত যোগ করুন',
+      AppLanguage.english: 'Add Custom Category',
+    },
+    'category_name_bn': {
+      AppLanguage.bangla: 'খাতের নাম (বাংলা)',
+      AppLanguage.english: 'Category Name (Bangla)',
+    },
+    'category_name_en': {
+      AppLanguage.bangla: 'খাতের নাম (ইংরেজি)',
+      AppLanguage.english: 'Category Name (English)',
+    },
+    'choose_color': {
+      AppLanguage.bangla: 'রং নির্বাচন করুন',
+      AppLanguage.english: 'Select Color',
+    },
+    'edit_transaction': {
+      AppLanguage.bangla: 'লেনদেন সম্পাদনা',
+      AppLanguage.english: 'Edit Transaction',
+    },
+    'delete_transaction': {
+      AppLanguage.bangla: 'লেনদেন মুছে ফেলুন',
+      AppLanguage.english: 'Delete Transaction',
+    },
+    'delete_confirm': {
+      AppLanguage.bangla: 'আপনি কি নিশ্চিতভাবে এই লেনদেনটি মুছে ফেলতে চান?',
+      AppLanguage.english: 'Are you sure you want to delete this transaction?',
+    },
+    'personal_ledger_scope': {
+      AppLanguage.bangla: 'আমার ব্যক্তিগত খতিয়ান',
+      AppLanguage.english: 'My Personal Ledger',
+    },
+    'family_ledger_scope': {
+      AppLanguage.bangla: 'পারিবারিক যৌথ খতিয়ান',
+      AppLanguage.english: 'Family Joint Ledger',
+    },
+    'due_date_label': {
+      AppLanguage.bangla: 'পরিশোধের শেষ তারিখ (অ্যালার্ম)',
+      AppLanguage.english: 'Due Date (Payment Alarm)',
+    },
+    'due_date_hint': {
+      AppLanguage.bangla: 'নির্ধারিত দিনে সকাল ৭টা, ৮টা এবং দুপুর ১২টায় অ্যালার্ম বাজবে',
+      AppLanguage.english: 'Alarms will alert at 7:00 AM, 8:00 AM and 12:00 on due date',
+    },
+    'attach_receipt': {
+      AppLanguage.bangla: 'রসিদ / ভাউচার সংযুক্ত করুন',
+      AppLanguage.english: 'Attach Receipt / Voucher',
+    },
+    'quick_amount': {
+      AppLanguage.bangla: 'দ্রুত পরিমাণ',
+      AppLanguage.english: 'Quick Amount',
+    },
+    // Push notifications (8 cases)
+    'push_custom_title': {
+      AppLanguage.bangla: 'পারিবারিক বিজ্ঞপ্তি',
+      AppLanguage.english: 'Family Notice',
+    },
+    'push_chat_title': {
+      AppLanguage.bangla: 'নতুন চ্যাট বার্তা',
+      AppLanguage.english: 'New Chat Message',
+    },
+    'push_entry_created': {
+      AppLanguage.bangla: 'নতুন লেনদেন এন্ট্রি',
+      AppLanguage.english: 'New Transaction Entry',
+    },
+    'push_entry_updated': {
+      AppLanguage.bangla: 'লেনদেন হালনাগাদ',
+      AppLanguage.english: 'Transaction Updated',
+    },
+    'push_invite_received': {
+      AppLanguage.bangla: 'পারিবারিক আমন্ত্রণ',
+      AppLanguage.english: 'Family Invitation',
+    },
+    'push_member_added': {
+      AppLanguage.bangla: 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
+      AppLanguage.english: 'New Member Joined 🎉',
+    },
+    'push_member_removed': {
+      AppLanguage.bangla: 'পারিবারিক সদস্যপদ আপডেট',
+      AppLanguage.english: 'Family Membership Update',
+    },
+    'push_payment_due_alarm': {
+      AppLanguage.bangla: 'পরিশোধ অনুস্মারক (জরুরি)',
+      AppLanguage.english: 'Payment Due Reminder (Urgent)',
+    },
+    'push_category_updated': {
+      AppLanguage.bangla: 'পারিবারিক হিসাবের খাত আপডেট',
+      AppLanguage.english: 'Expense Category Updated',
+    },
+    // Prayer & Azan
+    'fajr_name': {
+      AppLanguage.bangla: 'ফজর',
+      AppLanguage.english: 'Fajr',
+    },
+    'dhuhr_name': {
+      AppLanguage.bangla: 'যোহর',
+      AppLanguage.english: 'Dhuhr',
+    },
+    'asr_name': {
+      AppLanguage.bangla: 'আসর',
+      AppLanguage.english: 'Asr',
+    },
+    'maghrib_name': {
+      AppLanguage.bangla: 'মাগরিব',
+      AppLanguage.english: 'Maghrib',
+    },
+    'isha_name': {
+      AppLanguage.bangla: 'এশা ও তারাবীহ',
+      AppLanguage.english: 'Isha',
+    },
+    'azan_alarm_enabled': {
+      AppLanguage.bangla: 'আযান ও ওয়াক্ত অ্যালার্ম চালু',
+      AppLanguage.english: 'Adhan & Waqt Alarm Active',
+    },
+    'azan_alarm_disabled': {
+      AppLanguage.bangla: 'অ্যালার্ম বন্ধ',
+      AppLanguage.english: 'Alarm Off',
+    },
+    'sound_high': {
+      AppLanguage.bangla: 'উচ্চ শব্দ ও ভাইব্রেশন',
+      AppLanguage.english: 'High Sound & Vibration',
+    },
+    'alarm_time_offset': {
+      AppLanguage.bangla: 'ওয়াক্তের কতক্ষণ আগে অ্যালার্ম',
+      AppLanguage.english: 'Reminder Before Waqt',
+    },
+    'on_time': {
+      AppLanguage.bangla: 'ওয়াক্তের সঠিক সময়ে',
+      AppLanguage.english: 'Exact on time',
+    },
+    'minutes_before': {
+      AppLanguage.bangla: 'মিনিট আগে',
+      AppLanguage.english: 'minutes before',
+    },
+    // Quranic Surahs & Duas
+    'surahs_duas_tab': {
+      AppLanguage.bangla: 'সূরা ও দুআ',
+      AppLanguage.english: 'Surahs & Duas',
+    },
+    'dua_qunut_title': {
+      AppLanguage.bangla: 'দুআ কুনুত (বিতর নামাজ)',
+      AppLanguage.english: 'Dua Qunut (Witr Prayer)',
+    },
+    'sura_ar_rahman_title': {
+      AppLanguage.bangla: 'সূরা আর-রহমান',
+      AppLanguage.english: 'Surah Ar-Rahman',
+    },
+    'sura_yasin_title': {
+      AppLanguage.bangla: 'সূরা ইয়াসিন (কুরআনের হৃৎপিণ্ড)',
+      AppLanguage.english: 'Surah Yasin (Heart of Quran)',
+    },
+    'sura_mulk_title': {
+      AppLanguage.bangla: 'সূরা আল-মুলক (কবরের আজাব মুক্তি)',
+      AppLanguage.english: 'Surah Al-Mulk',
+    },
+    'sura_kahaf_title': {
+      AppLanguage.bangla: 'সূরা আল-কাহাফ (জুমার বিশেষ আমল)',
+      AppLanguage.english: 'Surah Al-Kahf',
+    },
+    'arabic_script': {
+      AppLanguage.bangla: 'মূল আরবি তিলাওয়াত',
+      AppLanguage.english: 'Arabic Recitation',
+    },
+    'bangla_pronunciation': {
+      AppLanguage.bangla: 'উচ্চারণ',
+      AppLanguage.english: 'Pronunciation',
+    },
+    'bangla_meaning': {
+      AppLanguage.bangla: 'বাংলা অনুবাদ ও অর্থ',
+      AppLanguage.english: 'Meaning & Translation',
+    },
+    'virtues_and_benefits': {
+      AppLanguage.bangla: 'ফজিলত ও বরকত',
+      AppLanguage.english: 'Virtues & Benefits',
+    },
+    'copy_success': {
+      AppLanguage.bangla: 'ক্লিপবোর্ডে কপি করা হয়েছে!',
+      AppLanguage.english: 'Copied to clipboard!',
+    },
+    'server_synced': {
+      AppLanguage.bangla: 'সার্ভার থেকে সংগৃহীত',
+      AppLanguage.english: 'Synced from Server',
+    },
+    // Custom Camera
+    'camera_viewfinder_title': {
+      AppLanguage.bangla: 'স্বচ্ছ রসিদ স্ক্যানার',
+      AppLanguage.english: 'Transparent Receipt Scanner',
+    },
+    'camera_scan_hint': {
+      AppLanguage.bangla: 'রসিদ বা ভাউচারটি স্বচ্ছ ফ্রেমের মাঝে রাখুন',
+      AppLanguage.english: 'Align receipt or voucher within the frame',
+    },
+    'capture_photo': {
+      AppLanguage.bangla: 'ছবি তুলুন',
+      AppLanguage.english: 'Take Photo',
+    },
+    'retake_photo': {
+      AppLanguage.bangla: 'পুনরায় তুলুন',
+      AppLanguage.english: 'Retake',
+    },
+    'use_photo': {
+      AppLanguage.bangla: 'এই ছবি ব্যবহার করুন',
+      AppLanguage.english: 'Use Photo',
+    },
+    'camera_permission_needed': {
+      AppLanguage.bangla: 'ক্যামেরা ব্যবহারের অনুমতি প্রয়োজন',
+      AppLanguage.english: 'Camera permission required',
+    },
+    'camera_initialize_error': {
+      AppLanguage.bangla: 'ক্যামেরা চালু করা সম্ভব হয়নি',
+      AppLanguage.english: 'Failed to initialize camera',
+    },
+    'digital_tasbih': {
+      AppLanguage.bangla: 'ডিজিটাল তসবিহ',
+      AppLanguage.english: 'Digital Tasbih',
+    },
+    'surahs_and_duas': {
+      AppLanguage.bangla: 'সূরা ও দুআ সমূহ',
+      AppLanguage.english: 'Surahs & Duas',
+    },
+    'family_amol_board': {
+      AppLanguage.bangla: 'পরিবারের আমল বোর্ড',
+      AppLanguage.english: 'Family Amol Board',
+    },
   };
 
-  String translate(String key) {
-    return _localizedValues[key]?[language] ?? key;
+  String translate(String key, [Map<String, String>? params]) {
+    String val = _localizedValues[key]?[language] ?? key;
+    if (params != null && params.isNotEmpty) {
+      params.forEach((paramKey, paramVal) {
+        val = val.replaceAll('{$paramKey}', paramVal);
+      });
+    }
+    return val;
   }
+
+  String t(String key, [Map<String, String>? params]) => translate(key, params);
 }
+

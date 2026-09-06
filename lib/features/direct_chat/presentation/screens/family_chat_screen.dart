@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/widgets/glass_app_bar.dart';
 import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -32,6 +34,7 @@ class _FamilyChatScreenState extends ConsumerState<FamilyChatScreen> {
     final familyId = user?.activeFamilyId ?? 'fam_01';
     final userName = user?.fullName ?? 'পরিবার সদস্য';
     final uid = user?.uid ?? 'usr_current';
+    final phone = user?.phoneNumber ?? '';
 
     _msgController.clear();
 
@@ -47,6 +50,14 @@ class _FamilyChatScreenState extends ConsumerState<FamilyChatScreen> {
       'createdAt': DateTime.now().toIso8601String(),
     });
 
+    // Case 2: Broadcast FCM push and in-app notification to other family members
+    NotificationService().sendChatMessagePush(
+      familyId: familyId,
+      senderName: userName,
+      senderPhone: phone,
+      messageText: text,
+    );
+
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent + 60,
@@ -61,10 +72,11 @@ class _FamilyChatScreenState extends ConsumerState<FamilyChatScreen> {
     final user = ref.watch(authUserProvider);
     final familyId = user?.activeFamilyId ?? 'fam_01';
     final myUid = user?.uid ?? '';
+    final l10n = ref.watch(appLocalizationsProvider);
 
     return GlassScaffold(
-      appBar: const GlassAppBar(
-        title: 'পারিবারিক চ্যাট রুম',
+      appBar: GlassAppBar(
+        title: l10n.translate('messages'),
       ),
       body: Column(
         children: [
@@ -86,10 +98,10 @@ class _FamilyChatScreenState extends ConsumerState<FamilyChatScreen> {
                 final docs = snapshot.data?.docs ?? [];
 
                 if (docs.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'কোনো বার্তা নেই। পরিবারের সাথে আলোচনা শুরু করুন।',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      l10n.translate('empty_data'),
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                     ),
                   );
                 }

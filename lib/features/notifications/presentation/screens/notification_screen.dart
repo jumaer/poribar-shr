@@ -74,6 +74,9 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          dividerColor: Colors.transparent,
+          dividerHeight: 0,
           labelColor: AppColors.accentGreen,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.accentGreen,

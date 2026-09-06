@@ -9,6 +9,7 @@ import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../core/widgets/glass_text_field.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/amol_entity.dart';
+import '../../domain/entities/surah_dua_entity.dart';
 import '../../services/amol_service.dart';
 
 class AmolScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,7 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
 
   List<AmolItem> _amols = [];
   int _selectedIndex = 0;
+  int _selectedSurahIndex = 0;
   bool _isVibrationEnabled = true;
   StreamSubscription<List<AmolItem>>? _templatesSub;
   StreamSubscription<List<AmolItem>>? _customAmolsSub;
@@ -202,6 +204,118 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(l10n.translate('save_amol_success')),
+                      backgroundColor: AppColors.primaryGreen,
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(l10n.translate('submit'), style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddCustomSurahDialog() {
+    final l10n = ref.read(appLocalizationsProvider);
+    final titleBnCtrl = TextEditingController();
+    final titleArCtrl = TextEditingController();
+    final arabicScriptCtrl = TextEditingController();
+    final pronunciationCtrl = TextEditingController();
+    final meaningCtrl = TextEditingController();
+    final virtueCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.iosDivider),
+        ),
+        title: const Text(
+          'নতুন সূরা বা দুআ যুক্ত করুন 📖',
+          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GlassTextField(
+                controller: titleBnCtrl,
+                label: 'সূরা বা দোয়ার নাম (বাংলা)',
+                hint: 'যেমন: সূরা আল-ফাতিহা বা আয়াত',
+                prefixIcon: Icons.edit_outlined,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: titleArCtrl,
+                label: 'আরবি শিরোনাম (ঐচ্ছিক)',
+                hint: 'যেমন: سورة الفاتحة',
+                prefixIcon: Icons.menu_book_outlined,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: arabicScriptCtrl,
+                label: 'মূল আরবি তিলাওয়াত',
+                hint: 'যেমন: بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ...',
+                maxLines: 3,
+                prefixIcon: Icons.translate_rounded,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: pronunciationCtrl,
+                label: 'বাংলা উচ্চারণ',
+                hint: 'যেমন: বিসমিল্লাহির রাহমানির রাহিম...',
+                maxLines: 2,
+                prefixIcon: Icons.record_voice_over_outlined,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: meaningCtrl,
+                label: 'বাংলা অনুবাদ ও অর্থ',
+                hint: 'যেমন: পরম করুণাময় অসীম দয়ালু আল্লাহর নামে...',
+                maxLines: 2,
+                prefixIcon: Icons.notes_outlined,
+              ),
+              const SizedBox(height: 10),
+              GlassTextField(
+                controller: virtueCtrl,
+                label: 'ফজিলত ও তাৎপর্য',
+                hint: 'যেমন: এটি কুরআনের সূচনা ও শিফায়ে কুল্লি...',
+                maxLines: 2,
+                prefixIcon: Icons.star_outline_rounded,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.translate('cancel'), style: const TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final titleBn = titleBnCtrl.text.trim();
+              if (titleBn.isNotEmpty) {
+                final newEntity = SurahDuaEntity(
+                  id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+                  titleBn: titleBn,
+                  titleAr: titleArCtrl.text.trim(),
+                  surahNumber: 'কাস্টম সূরা/দুআ',
+                  arabicScript: arabicScriptCtrl.text.trim(),
+                  pronunciationBn: pronunciationCtrl.text.trim(),
+                  meaningBn: meaningCtrl.text.trim(),
+                  virtue: virtueCtrl.text.trim().isNotEmpty ? virtueCtrl.text.trim() : 'ফজিলতপূর্ণ আমল',
+                );
+
+                await _amolService.addNewSurahDua(newEntity);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('নতুন সূরা/দুআ সফলভাবে সার্ভারে যুক্ত হয়েছে!'),
                       backgroundColor: AppColors.primaryGreen,
                     ),
                   );
@@ -661,330 +775,467 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
     );
   }
 
-  Widget _buildAyatulKursiTab() {
+  Widget _buildSurahsDuasTab() {
     final l10n = ref.watch(appLocalizationsProvider);
-    final ayatulKursiIdx = _amols.indexWhere((a) => a.id == 'ayatul_kursi');
-    final item = ayatulKursiIdx != -1
-        ? _amols[ayatulKursiIdx]
-        : const AmolItem(
-            id: 'ayatul_kursi',
-            nameBn: 'আয়াতুল কুরসি',
-            nameAr: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ',
-            virtue: 'কুরআনের সর্বশ্রেষ্ঠ আয়াত, হেফাজত ও বরকতের অমূল্য ঢাল',
-            count: 0,
-            target: 7,
-          );
+    final surahsAsync = ref.watch(surahsDuasProvider);
 
-    final count = item.count;
-    final target = item.target > 0 ? item.target : 7;
-    final progress = (count / target).clamp(0.0, 1.0);
-
-    void incrementAyatulKursi() {
-      if (_isVibrationEnabled) HapticFeedback.lightImpact();
-      setState(() {
-        if (ayatulKursiIdx != -1) {
-          final updated = _amols[ayatulKursiIdx].copyWith(count: count + 1);
-          _amols[ayatulKursiIdx] = updated;
-        } else {
-          _amols.add(item.copyWith(count: count + 1));
+    return surahsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(AppColors.primaryGreen)),
+      ),
+      error: (e, _) => Center(
+        child: Text('${l10n.translate("sync_success")}: $e', style: const TextStyle(color: AppColors.primaryRed)),
+      ),
+      data: (surahs) {
+        if (surahs.isEmpty) {
+          return Center(child: Text(l10n.translate('no_data'), style: const TextStyle(color: AppColors.textSecondary)));
         }
-      });
-      _syncAmols();
-    }
 
-    void resetAyatulKursi() {
-      setState(() {
-        if (ayatulKursiIdx != -1) {
-          _amols[ayatulKursiIdx] = _amols[ayatulKursiIdx].copyWith(count: 0);
+        if (_selectedSurahIndex >= surahs.length) {
+          _selectedSurahIndex = 0;
         }
-      });
-      _syncAmols();
-    }
+        final currentSurah = surahs[_selectedSurahIndex];
 
-    void setAyatulKursiTarget(int newTarget) {
-      setState(() {
-        if (ayatulKursiIdx != -1) {
-          _amols[ayatulKursiIdx] = _amols[ayatulKursiIdx].copyWith(target: newTarget);
+        final amolIdx = _amols.indexWhere((a) => a.id == currentSurah.id || (currentSurah.id.contains('ayatul') && a.id == 'ayatul_kursi'));
+        final amolItem = amolIdx != -1 ? _amols[amolIdx] : null;
+        final count = amolItem?.count ?? 0;
+        final target = amolItem?.target ?? 33;
+        final progress = target > 0 ? (count / target).clamp(0.0, 1.0) : 0.0;
+
+        void incrementSurahCount() {
+          if (_isVibrationEnabled) HapticFeedback.lightImpact();
+          setState(() {
+            if (amolIdx != -1) {
+              _amols[amolIdx] = amolItem!.copyWith(count: count + 1);
+            } else {
+              final newItem = AmolItem(
+                id: currentSurah.id,
+                nameBn: currentSurah.titleBn,
+                nameAr: currentSurah.titleAr,
+                virtue: currentSurah.virtue,
+                count: 1,
+                target: 33,
+              );
+              _amols.add(newItem);
+            }
+          });
+          _syncAmols();
         }
-      });
-      _syncAmols();
-    }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primaryGreen.withValues(alpha: 0.25),
-                  AppColors.cardDarkSecondary,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.5)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_awesome, color: AppColors.primaryGreen, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.translate('ayatul_kursi_title'),
-                        style: const TextStyle(
-                          color: AppColors.primaryGreen,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        l10n.translate('ayatul_kursi_desc'),
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
+        void resetSurahCount() {
+          setState(() {
+            if (amolIdx != -1) {
+              _amols[amolIdx] = amolItem!.copyWith(count: 0);
+            }
+          });
+          _syncAmols();
+        }
 
-          // Arabic Scripture Box
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.cardDark,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.4)),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'আয়াতুল কুরসি (সূরা আল-বাকারা: ২৫৫)',
-                      style: TextStyle(
-                        color: AppColors.primaryGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy, color: AppColors.textSecondary, size: 18),
-                      tooltip: 'আরবি ও অর্থ কপি করুন',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(
-                          text: '${l10n.translate("ayatul_kursi_arabic")}\n\n${l10n.translate("ayatul_kursi_bangla_pronunciation")}\n\n${l10n.translate("ayatul_kursi_bangla_meaning")}',
-                        ));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('আয়াতুল কুরসি সফলভাবে কপি করা হয়েছে!'),
-                            backgroundColor: AppColors.primaryGreen,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const Divider(color: AppColors.iosDivider, height: 16),
-                Text(
-                  l10n.translate('ayatul_kursi_arabic'),
-                  textAlign: TextAlign.justify,
-                  textDirection: TextDirection.rtl,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    height: 2.2,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardDarkSecondary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.translate('ayatul_kursi_bangla_pronunciation'),
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.translate('ayatul_kursi_bangla_meaning'),
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
+        void setSurahTarget(int newTarget) {
+          setState(() {
+            if (amolIdx != -1) {
+              _amols[amolIdx] = amolItem!.copyWith(target: newTarget);
+            } else {
+              _amols.add(AmolItem(
+                id: currentSurah.id,
+                nameBn: currentSurah.titleBn,
+                nameAr: currentSurah.titleAr,
+                virtue: currentSurah.virtue,
+                count: 0,
+                target: newTarget,
+              ));
+            }
+          });
+          _syncAmols();
+        }
 
-          // Recitation Counter Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.cardDark,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.iosDivider),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'পাঠ সংখ্যা ও তসবিহ কাউন্টার',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh, color: AppColors.primaryRed, size: 20),
-                      tooltip: 'কাউন্টার রিসেট',
-                      onPressed: resetAyatulKursi,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Large Interactive Circular Tap Button
-                GestureDetector(
-                  onTap: incrementAyatulKursi,
-                  child: Container(
-                    width: 170,
-                    height: 170,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          AppColors.cardDarkSecondary,
-                          AppColors.cardDark,
-                          AppColors.primaryGreen.withValues(alpha: 0.15),
-                        ],
-                      ),
-                      border: Border.all(color: AppColors.primaryGreen, width: 3.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryGreen.withValues(alpha: 0.25),
-                          blurRadius: 20,
-                          spreadRadius: 2,
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 44,
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: surahs.length + 1,
+                  itemBuilder: (context, idx) {
+                    if (idx == surahs.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: ActionChip(
+                          backgroundColor: AppColors.cardDarkSecondary,
+                          side: const BorderSide(color: AppColors.primaryGreen),
+                          avatar: const Icon(Icons.add, size: 16, color: AppColors.primaryGreen),
+                          label: const Text('+ নতুন সূরা/দুআ', style: TextStyle(color: AppColors.primaryGreen, fontSize: 12)),
+                          onPressed: _showAddCustomSurahDialog,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$count',
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 42,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'টার্গেট: $target বার',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Text(
-                            'ট্যাপ করুন',
-                            style: TextStyle(
-                              color: AppColors.primaryGreen,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Progress Indicator
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 8,
-                    backgroundColor: AppColors.cardDarkSecondary,
-                    valueColor: const AlwaysStoppedAnimation(AppColors.primaryGreen),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${(progress * 100).toInt()}% সম্পন্ন',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                ),
-                const SizedBox(height: 12),
-
-                // Quick Target Selector
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [1, 3, 7, 11, 100].map((t) {
-                    final isSel = target == t;
+                      );
+                    }
+                    final isSel = idx == _selectedSurahIndex;
+                    final s = surahs[idx];
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
-                        label: Text('$t বার'),
+                        label: Text(s.titleBn),
                         selected: isSel,
                         selectedColor: AppColors.primaryGreen,
                         backgroundColor: AppColors.cardDarkSecondary,
                         labelStyle: TextStyle(
                           color: isSel ? Colors.black : AppColors.textPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
                         ),
-                        onSelected: (_) => setAyatulKursiTarget(t),
+                        onSelected: (_) => setState(() => _selectedSurahIndex = idx),
                       ),
                     );
-                  }).toList(),
+                  },
                 ),
-              ],
-            ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primaryGreen.withValues(alpha: 0.22),
+                      AppColors.cardDarkSecondary,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: AppColors.primaryGreen, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentSurah.titleBn,
+                            style: const TextStyle(
+                              color: AppColors.primaryGreen,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                currentSurah.surahNumber,
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  l10n.translate('server_synced'),
+                                  style: const TextStyle(color: AppColors.accentGreen, fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.cardDark,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.4)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l10n.translate('arabic_script'),
+                          style: const TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, color: AppColors.textSecondary, size: 18),
+                          tooltip: l10n.translate('copy_success'),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(
+                              text: '${currentSurah.arabicScript}\n\n${currentSurah.pronunciationBn}\n\n${currentSurah.meaningBn}',
+                            ));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(l10n.translate('copy_success')),
+                                backgroundColor: AppColors.primaryGreen,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Text(
+                        currentSurah.arabicScript,
+                        textAlign: TextAlign.justify,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          height: 2.1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.cardDarkSecondary,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.iosDivider),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.translate('bangla_pronunciation'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      currentSurah.pronunciationBn,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        height: 1.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.cardDarkSecondary,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.iosDivider),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      l10n.translate('bangla_meaning'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      currentSurah.meaningBn,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        height: 1.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGreen.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.star_outline_rounded, color: AppColors.primaryGreen, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          l10n.translate('virtues_and_benefits'),
+                          style: const TextStyle(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      currentSurah.virtue,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.cardDark,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.iosDivider),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          l10n.translate('amol_tasbih_title'),
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: AppColors.textSecondary, size: 20),
+                          tooltip: l10n.translate('refresh'),
+                          onPressed: resetSurahCount,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: incrementSurahCount,
+                      child: Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.cardDarkSecondary,
+                          border: Border.all(color: AppColors.primaryGreen, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryGreen.withValues(alpha: 0.25),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'টার্গেট: $target',
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'ট্যাপ করুন',
+                                style: TextStyle(
+                                  color: AppColors.primaryGreen,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: AppColors.cardDarkSecondary,
+                        valueColor: const AlwaysStoppedAnimation(AppColors.primaryGreen),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${(progress * 100).toInt()}% সম্পন্ন',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [1, 3, 7, 11, 33, 100].map((t) {
+                        final isSel = target == t;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: ChoiceChip(
+                            label: Text('$t'),
+                            selected: isSel,
+                            selectedColor: AppColors.primaryGreen,
+                            backgroundColor: AppColors.cardDarkSecondary,
+                            labelStyle: TextStyle(
+                              color: isSel ? Colors.black : AppColors.textPrimary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            onSelected: (_) => setSurahTarget(t),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
-          const SizedBox(height: 24),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -992,19 +1243,24 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
   Widget build(BuildContext context) {
     final user = ref.watch(authUserProvider);
     final familyId = user?.activeFamilyId ?? 'fam_01';
+    final l10n = ref.watch(appLocalizationsProvider);
 
     return GlassScaffold(
       appBar: GlassAppBar(
-        title: 'দৈনিক আমল, তসবিহ ও আয়াতুল কুরসি',
+        title: l10n.translate('amol_tasbih_title'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.center,
+          dividerColor: Colors.transparent,
+          dividerHeight: 0,
           labelColor: AppColors.primaryGreen,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryGreen,
-          tabs: const [
-            Tab(text: 'ডিজিটাল তসবিহ', icon: Icon(Icons.touch_app_outlined, size: 18)),
-            Tab(text: 'আয়াতুল কুরসি', icon: Icon(Icons.auto_stories_outlined, size: 18)),
-            Tab(text: 'পরিবারের আমল বোর্ড', icon: Icon(Icons.leaderboard_outlined, size: 18)),
+          tabs: [
+            Tab(text: l10n.translate('digital_tasbih'), icon: const Icon(Icons.touch_app_outlined, size: 18)),
+            Tab(text: l10n.translate('surahs_and_duas'), icon: const Icon(Icons.auto_stories_outlined, size: 18)),
+            Tab(text: l10n.translate('family_amol_board'), icon: const Icon(Icons.leaderboard_outlined, size: 18)),
           ],
         ),
       ),
@@ -1012,7 +1268,7 @@ class _AmolScreenState extends ConsumerState<AmolScreen>
         controller: _tabController,
         children: [
           _buildDigitalTasbihTab(),
-          _buildAyatulKursiTab(),
+          _buildSurahsDuasTab(),
           _buildFamilyBoardTab(familyId),
         ],
       ),

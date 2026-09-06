@@ -187,26 +187,11 @@ class FamilyFirestoreDatasource {
     // (do not generate notification when family owner/creator first creates the family)
     if (!isFamilyHead) {
       try {
-        await _firestore
-            .collection('families')
-            .doc(familyId)
-            .collection('notifications')
-            .add({
-          'title': 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
-          'body': '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
-          'type': 'new_member',
-          'memberName': memberName,
-          'memberPhone': phone,
-          'createdAt': FieldValue.serverTimestamp(),
-          'time': DateTime.now().toIso8601String(),
-        });
-
-        NotificationService().sendCustomPush(
-          title: 'নতুন সদস্য যুক্ত হয়েছেন 🎉',
-          body: '$memberName ($relation) আপনার পরিবারে যুক্ত হয়েছেন!',
-          senderName: 'সিস্টেম',
-          receiverId: familyId,
-          senderIsPermitted: true,
+        await NotificationService().broadcastFamilyMemberChangeNotification(
+          familyId: familyId,
+          memberName: memberName,
+          memberPhone: phone,
+          isRemoved: false,
         );
       } catch (_) {}
     }
@@ -268,6 +253,19 @@ class FamilyFirestoreDatasource {
 
   Future<void> removeMemberFromFamily(String familyId, String phone) async {
     final cleanPhone = _sanitizePhone(phone);
+    String memberName = 'সদস্য';
+    try {
+      final doc = await _firestore
+          .collection('families')
+          .doc(familyId)
+          .collection('members')
+          .doc(cleanPhone)
+          .get();
+      if (doc.exists && doc.data() != null) {
+        memberName = doc.data()?['name']?.toString() ?? 'সদস্য';
+      }
+    } catch (_) {}
+
     await _firestore
         .collection('families')
         .doc(familyId)
@@ -279,6 +277,16 @@ class FamilyFirestoreDatasource {
       'activeFamilyId': '',
       'role': 'detached',
     }, SetOptions(merge: true));
+
+    // Case 6: Broadcast member removal
+    try {
+      await NotificationService().broadcastFamilyMemberChangeNotification(
+        familyId: familyId,
+        memberName: memberName,
+        memberPhone: cleanPhone,
+        isRemoved: true,
+      );
+    } catch (_) {}
   }
 
   Stream<List<Map<String, dynamic>>> streamPendingInvitations(String phone) {
@@ -294,6 +302,23 @@ class FamilyFirestoreDatasource {
   Future<void> sendFamilyInvitation(Map<String, dynamic> inviteData) async {
     final id = inviteData['id'] as String;
     await _firestore.collection('family_invitations').doc(id).set(inviteData);
+
+    // Case 5: Broadcast push when user receives invitation / request
+    try {
+      final targetPhone = inviteData['targetPhone']?.toString() ?? '';
+      final senderName = inviteData['inviterName']?.toString() ?? 'পারিবারিক অ্যাডমিন';
+      final familyName = inviteData['familyName']?.toString() ?? 'পারিবারিক খতিয়ান';
+      final familyId = inviteData['familyId']?.toString() ?? '';
+
+      if (targetPhone.isNotEmpty) {
+        await NotificationService().broadcastFamilyInviteNotification(
+          targetPhone: targetPhone,
+          senderName: senderName,
+          familyName: familyName,
+          familyId: familyId,
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> acceptFamilyInvitation({

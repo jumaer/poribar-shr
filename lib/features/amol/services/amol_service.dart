@@ -3,9 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
+import '../../../../core/constants/serverkey.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/notification_service.dart';
 import '../domain/entities/amol_entity.dart';
+import '../domain/entities/surah_dua_entity.dart';
 
 class AmolService {
   static final AmolService _instance = AmolService._internal();
@@ -363,8 +365,178 @@ class AmolService {
       debugPrint('sendAmolReminder error: $e');
     }
   }
+
+  /// Default Quranic Surahs & Duas
+  List<SurahDuaEntity> getDefaultSurahsAndDuas() {
+    return const [
+      SurahDuaEntity(
+        id: ServerKey.keyDuaQunut,
+        titleBn: 'দুআ কুনুত (বিতর নামাজ)',
+        titleAr: 'دعاء القنوت',
+        surahNumber: 'বিতর নামাজের অপরিহার্য দুআ',
+        arabicScript: 'اللَّهُمَّ إِنَّا نَسْتَعِينُكَ وَنَسْتَغْفِرُكَ وَنُؤْمِنُ بِكَ وَنَتَوَكَّلُ عَلَيْكَ وَنُثْنِي عَلَيْكَ الْخَيْرَ وَنَشْكُرُكَ وَلَا نَكْفُرُكَ وَنَخْلَعُ وَنَتْرُكُ مَنْ يَفْجُرُكَ ، اللَّهُمَّ إِيَّاكَ نَعْبُدُ وَلَكَ نُصَلِّي وَنَسْجُدُ وَإِلَيْكَ نَسْعَى وَنَحْفِدُ نَرْجُو رَحْمَتَكَ وَنَخْشَى عَذَابَكَ إِنَّ عَذَابَكَ بِالْكُفَّارِ مُلْحِقٌ',
+        pronunciationBn: 'উচ্চারণ: আল্লা-হুম্মা ইন্না- নাসতা‘ঈনুকা ওয়া নাসতাগফিরুকা ওয়া নু’মিনু বিকা ওয়া নাতাওয়াক্কালু ‘আলাইকা ওয়া নুছনী ‘আলাইকাল খইর, ওয়া নাশকুরুকা ওয়ালা- নাকফুরুকা ওয়া নাখলা‘উ ওয়া নাতরুকু মাই ইয়াফজুরুকা। আল্লা-হুম্মা ইয়্যা-কা না‘বুদু ওয়া লাকা নুসল্লী ওয়া নাসজুদু ওয়া ইলাইকা নাস‘আ- ওয়া নাহফিদ, নারজু রহমাতাকা ওয়া নাখশা- ‘আযা-বাকা ইন্না ‘আযা-বাকা বিল কুফফা-রি মুলহিক্ব।',
+        meaningBn: 'অর্থ: হে আল্লাহ! আমরা আপনার নিকট সাহায্য প্রার্থনা করছি, আপনার নিকট ক্ষমা ভিক্ষা করছি, আপনার প্রতি বিশ্বাস স্থাপন করছি এবং আপনার উপর ভরসা করছি। আপনার উত্তম প্রশংসা করছি, আপনার কৃতজ্ঞতা প্রকাশ করছি এবং অকৃতজ্ঞ হচ্ছি না। যে ব্যক্তি আপনার অবাধ্য হয় তাকে বর্জন ও পরিত্যাগ করছি। হে আল্লাহ! আমরা কেবল আপনারই ইবাদত করি, আপনার জন্যই নামাজ পড়ি এবং সিজদা করি। আপনার দিকেই দৌড়াই ও এগিয়ে যাই। আমরা আপনার রহমতের আশা করি এবং আপনার শাস্তিকে ভয় করি। নিশ্চয়ই আপনার শাস্তি কাফেরদের ওপর কার্যকর হবে।',
+        virtue: 'হাদিস অনুযায়ী বিতর নামাজে কুনুত পাঠ করা সুন্নাত যা গুনাহ মাফ ও আল্লাহর সান্নিধ্য অর্জনের অন্যতম মাধ্যম।',
+      ),
+      SurahDuaEntity(
+        id: ServerKey.keySuraArRahman,
+        titleBn: 'সূরা আর-রহমান (কুরআনের সৌন্দর্য)',
+        titleAr: 'سورة الرحمن',
+        surahNumber: 'সূরা নং ৫৫ (মাক্কী/মাদানী, ৭৮ আয়াত)',
+        arabicScript: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ الرَّحْمَٰنُ ۝ عَلَّمَ الْقُرْآنَ ۝ خَلَقَ الْإِنْسَانَ ۝ عَلَّمَهُ الْبَيَانَ ۝ الشَّمْسُ وَالْقَمَرُ بِحُسْبَانٍ ۝ وَالنَّجْمُ وَالشَّجَرُ يَسْجُدَانِ ۝ وَالسَّمَاءَ رَفَعَهَا وَوَضَعَ الْمِيزَانَ ۝ أَلَّا تَطْغَوْا فِي الْمِيزَانِ ۝ وَأَقِيمُوا الْوَزْنَ بِالْقِسْطِ وَلَا تُخْسِرُوا الْمِيزَانَ ۝ وَالْأَرْضَ وَضَعَهَا لِلْأَنَامِ ۝ فِيهَا فَاكِهَةٌ وَالنَّخْلُ ذَاتُ الْأَكْمَامِ ۝ وَالْحَبُّ ذُو الْعَصْفِ وَالرَّيْحَانُ ۝ فَبِأَيِّ آلَاءِ رَبِّكُمَا تُكَذِّبَانِ',
+        pronunciationBn: 'উচ্চারণ: আর-রহমা-ন। ‘আল্লামাল ক্বুরআ-ন। খলাক্বল ইনসা-ন। ‘আল্লামাহুল বায়া-ন। আশশামসু ওয়াল ক্বামারু বিহিসবা-ন। ওয়াননাজমু ওয়াশ শাজারু ইয়াসজুদা-ন। ওয়াসসামা-আ রফা‘আহা- ওয়া ওয়াদ্বা‘আল মীযা-ন... ফাবি আইয়্যি আ-লা-ই রব্বিকুমা তুকাজ্জিবা-ন।',
+        meaningBn: 'অর্থ: পরম দয়াময় আল্লাহ। তিনি কোরআন শিক্ষা দিয়েছেন। তিনি মানব সৃষ্টি করেছেন। তাকে ভাব প্রকাশ শেখিয়েছেন। সূর্য ও চন্দ্র আবর্তন করে নির্ধারিত হিসেবে। আর তৃণলতা ও বৃক্ষরাজি সেজদারত রয়েছে। আকাশকে তিনি সমুন্নত করেছেন এবং স্থাপন করেছেন ভারসাম্য... অতএব, তোমরা উভয়ে তোমাদের রবের কোন কোন অনুগ্রহকে অস্বীকার করবে?',
+        virtue: 'হাদিসে সূরা আর-রহমানকে কুরআনের বধূ (আরুসুল কুরআন) বলা হয়েছে। এটি পাঠে হৃদয়ে গভীর শান্তি আসে ও নিয়ামতের শোকর আদায় হয়।',
+      ),
+      SurahDuaEntity(
+        id: ServerKey.keySuraYasin,
+        titleBn: 'সূরা ইয়াসিন (কুরআনের হৃৎপিণ্ড)',
+        titleAr: 'سورة يس',
+        surahNumber: 'সূরা নং ৩৬ (মাক্কী, ৮৩ আয়াত)',
+        arabicScript: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ يس ۝ وَالْقُرْآنِ الْحَكِيمِ ۝ إِنَّكَ لَمِنَ الْمُرْسَلِينَ ۝ عَلَىٰ صِرَاطٍ مُسْتَقِيمٍ ۝ تَنْزِيلَ الْعَزِيزِ الرَّحِيمِ ۝ لِتُنْذِرَ قَوْمًا مَا أُنْذِرَ آبَاؤُهُمْ فَهُمْ غَافِلُونَ ۝ لَقَدْ حَقَّ الْقَوْلُ عَلَىٰ أَكْثَرِهِمْ فَهُمْ لَا يُؤْمِنُونَ ۝ إِنَّا جَعَلْنَا فِي أَعْنَاقِهِمْ أَغْلَالًا فَهِيَ إِلَى الْأَذْقَانِ فَهُمْ مُقْمَحُونَ',
+        pronunciationBn: 'উচ্চারণ: ইয়া-সীন। ওয়াল ক্বুরআ-নিল হাকীম। ইন্নাকা লামিনাল মুরসালীন। ‘আলা- সিরা-তিম মুস্তাক্বীম। তানযীলাল ‘আযীযির রহীম। লি তুনযিরা ক্বাওমাম মা- উনযিরা আ-বা-উহুম ফাহুম গ-ফিলূন...',
+        meaningBn: 'অর্থ: ইয়াসীন। বিজ্ঞানময় কুরআনের শপথ। নিশ্চয়ই আপনি প্রেরিত রাসূলগণের অন্তর্ভুক্ত। সরল সোজা পথের ওপর প্রতিষ্ঠিত। এই কুরআন পরাক্রমশালী পরম দয়ালু আল্লাহর অবতীর্ণ, যাতে আপনি এমন এক জাতিকে সতর্ক করতে পারেন যাদের পূর্বপুরুষদের সতর্ক করা হয়নি...',
+        virtue: 'রাসূলুল্লাহ (সা.) বলেছেন, \'সূরা ইয়াসিন কুরআনের হৃৎপিণ্ড। যে ব্যক্তি আল্লাহর সন্তুষ্টি ও পরকালের মুক্তির উদ্দেশ্যে এটি পাঠ করবে তার অতীত জীবনের গুনাহ ক্ষমা করে দেওয়া হবে।\'',
+      ),
+      SurahDuaEntity(
+        id: ServerKey.keySuraMulk,
+        titleBn: 'সূরা আল-মুলক (কবরের আজাব মুক্তি)',
+        titleAr: 'سورة الملك',
+        surahNumber: 'সূরা নং ৬৭ (মাক্কী, ৩০ আয়াত)',
+        arabicScript: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ تَبَارَكَ الَّذِي بِيَدِهِ الْمُلْكُ وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ ۝ الَّذِي خَلَقَ الْمَوْتَ وَالْحَيَاةَ لِيَبْلُوَكُمْ أَيُّكُمْ أَحْسَنُ عَمَلًا ۚ وَهُوَ الْعَزِيزُ الْغَفُورُ ۝ الَّذِي خَلَقَ سَبْعَ سَمَاوَاتٍ طِبَاقًا ۖ مَا تَرَىٰ فِي خَلْقِ الرَّحْمَٰنِ مِنْ تَفَاوُتٍ ۖ فَارْجِعِ الْبَصَرَ هَلْ تَرَىٰ مِنْ فُطُورٍ',
+        pronunciationBn: 'উচ্চারণ: তাবা-রকাল্লাযী বিয়াদিহিল মুলকু ওয়াহুওয়া ‘আলা- কুল্লি শাইয়িন ক্বদীর। আল্লাযী খলাক্বল মাওতা ওয়াল হায়া-তা লিইয়াবলুওয়াকুম আইয়্যুকুম আহসানু ‘অমালা-, ওয়াহুওয়াল ‘আযীযুল গফূর। আল্লাযী খলাক্ব সাব‘আ সামা-ওয়া-তিন তিবা-ক্বা-...',
+        meaningBn: 'অর্থ: বরকতময় তিনি যাঁর হাতে রয়েছে সার্বভৌম কর্তৃত্ব এবং তিনি সব কিছুর ওপর পূর্ণ ক্ষমতাবান। যিনি সৃষ্টি করেছেন মৃত্যু ও জীবন তোমাদের পরীক্ষা করার জন্য যে, কে তোমাদের মধ্যে আমলের দিক দিয়ে শ্রেষ্ঠ। আর তিনি পরাক্রমশালী, ক্ষমাশীল...',
+        virtue: 'রাসূলুল্লাহ (সা.) বলেছেন, \'কুরআনে ত্রিশ আয়াতবিশিষ্ট একটি সূরা রয়েছে, যা পাঠকারীর জন্য সুপারিশ করতে থাকবে যতক্ষণ না তাকে ক্ষমা করে দেওয়া হয়; তা হলো সূরা তাবারাকাল্লাযী (আল-মুলক)।\' এটি কবরের আজাব থেকে রক্ষা করে।',
+      ),
+      SurahDuaEntity(
+        id: ServerKey.keySuraKahaf,
+        titleBn: 'সূরা আল-কাহাফ (জুমার বিশেষ নূর)',
+        titleAr: 'سورة الكهف',
+        surahNumber: 'সূরা নং ১৮ (মাক্কী, ১১০ আয়াত)',
+        arabicScript: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ۝ الْحَمْدُ لِلَّهِ الَّذِي أَنْزَلَ عَلَىٰ عَبْدِهِ الْكِتَابَ وَلَمْ يَجْعَلْ لَهُ عِوَجًا ۝ قَيِّمًا لِيُنْذِرَ بَأْسًا شَدِيدًا مِنْ لَدُنْهُ وَيُبَشِّرَ الْمُؤْمِنِينَ الَّذِينَ يَعْمَلُونَ الصَّالِحَاتِ أَنَّ لَهُمْ أَجْرًا حَسَنًا ۝ مَاكِثِينَ فِيهِ أَبَدًا ۝ وَيُنْذِرَ الَّذِينَ قَالُوا اتَّخَذَ اللَّهُ وَلَدًا',
+        pronunciationBn: 'উচ্চারণ: আলহামদু লিল্লা-হিল্লাযী আনযালা ‘আলা- ‘আবদিহিল কিতা-বা ওয়া লাম ইয়াজ‘আল লাহু ‘ইওয়াজা-। ক্বায়্যিমাল লিইউনযিরা বা’সান শাদীদাম মিল্লাদুনহু ওয়া ইউবাশশিরাল মু’মিনীনা...',
+        meaningBn: 'অর্থ: যাবতীয় প্রশংসা আল্লাহর যিনি তাঁর বান্দার ওপর এই কিতাব অবতীর্ণ করেছেন এবং এতে কোনো বক্রতা রাখেননি। সুদৃঢ় বাণী, আল্লাহর পক্ষ থেকে এক কঠিন শাস্তি সম্পর্কে সতর্ক করার জন্য এবং সৎকর্মশীল মুমিনদের সুসংবাদ দেওয়ার জন্য...',
+        virtue: 'রাসূলুল্লাহ (সা.) বলেছেন, \'যে ব্যক্তি জুমার দিনে সূরা কাহাফ পাঠ করবে, তার জন্য এক জুমা থেকে পরবর্তী জুমা পর্যন্ত বিশেষ নূর প্রজ্জ্বলিত থাকবে এবং দাজ্জালের ফিতনা হতে নিরাপদ থাকবে।\'',
+      ),
+      SurahDuaEntity(
+        id: ServerKey.keyAyatulKursi,
+        titleBn: 'আয়াতুল কুরসি (সূরা আল-বাকারা: ২৫৫)',
+        titleAr: 'آية الكرسي',
+        surahNumber: 'সূরা নং ২, আয়াত ২৫৫',
+        arabicScript: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ ۚ لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ ۗ مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ ۚ وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ ۖ وَلَا يَئُودُهُ حِفْظُهُمَا ۚ وَهُوَ الْعَلِيُّ الْعَظِيمُ',
+        pronunciationBn: 'উচ্চারণ: আল্লা-হু লা- ইলা-হা ইল্লা- হুওয়াল হাইয়্যুল ক্বাইয়্যূম। লা- তা’খুযুহু সিনাতুঁও ওয়ালা- নাওম। লাহূ মা- ফিসসামা-ওয়া-তি ওয়ামা- ফিল আরদ্ব। মান যাল্লাযী ইয়াশফা‘উ ‘ইনদাহূ ইল্লা- বিইযনিহী। ইয়া‘লামু মা- বাইনা আইদীহিম ওয়ামা- খলফাহুম...',
+        meaningBn: 'অর্থ: আল্লাহ, তিনি ছাড়া কোনো সত্য উপাস্য নেই। তিনি চিরঞ্জীব, সবকিছুর ধারক। তন্দ্রা বা নিদ্রা তাঁকে স্পর্শ করে না। আকাশমণ্ডল ও পৃথিবীতে যা কিছু আছে সব তাঁরই...',
+        virtue: 'কুরআনের সর্বশ্রেষ্ঠ আয়াত। ফরজ নামাজের পর পাঠকারী ও জান্নাতের মাঝে কেবল মৃত্যুই ব্যবধান থাকে। এটি শয়তানের অনিষ্ট ও সমস্ত আপদ-বিপদ হতে রক্ষাকারী ঢাল।',
+      ),
+    ];
+  }
+
+  /// Stream Super Global Quranic Surahs & Duas from Firestore
+  Stream<List<SurahDuaEntity>> streamSurahsAndDuas() {
+    try {
+      final docRef = _firestore.collection(ServerKey.colSuperGlobal).doc(ServerKey.docSurahsDuas);
+      return docRef.snapshots().map((snap) {
+        if (!snap.exists || snap.data() == null) {
+          return getDefaultSurahsAndDuas();
+        }
+        final items = (snap.data()?['items'] as List?) ?? [];
+        if (items.isEmpty) {
+          return getDefaultSurahsAndDuas();
+        }
+        return items
+            .map((m) => SurahDuaEntity.fromMap(Map<String, dynamic>.from(m)))
+            .toList();
+      }).handleError((e) {
+        debugPrint('streamSurahsAndDuas error: $e');
+        return getDefaultSurahsAndDuas();
+      });
+    } catch (e) {
+      debugPrint('streamSurahsAndDuas init error: $e');
+      return Stream.value(getDefaultSurahsAndDuas());
+    }
+  }
+
+  /// Upload or update Super Global Surahs & Duas to Firebase Firestore
+  Future<void> saveSuperGlobalSurahs(List<SurahDuaEntity> list) async {
+    try {
+      final docRef = _firestore.collection(ServerKey.colSuperGlobal).doc(ServerKey.docSurahsDuas);
+      await docRef.set({
+        'items': list.map((s) => s.toMap()).toList(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('Super Global Surahs and Duas saved to Firestore');
+    } catch (e) {
+      debugPrint('saveSuperGlobalSurahs error: $e');
+    }
+  }
+
+  /// Automatically seeds all static Surahs, Duas, Amols, and Configs to Firestore on app startup
+  /// if they do not exist or are empty on the server.
+  Future<void> autoSeedSuperGlobalDefaults() async {
+    try {
+      // 1. Seed surahs_duas if missing or empty
+      final surahDoc = _firestore.collection(ServerKey.colSuperGlobal).doc(ServerKey.docSurahsDuas);
+      final surahSnap = await surahDoc.get();
+      if (!surahSnap.exists ||
+          surahSnap.data() == null ||
+          (surahSnap.data()?['items'] as List?)?.isEmpty == true) {
+        await surahDoc.set({
+          'items': getDefaultSurahsAndDuas().map((s) => s.toMap()).toList(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('Auto-seeded super_global/surahs_duas to Firestore successfully!');
+      }
+
+      // 2. Seed amol_templates if missing or empty
+      final amolDoc = _firestore.collection(ServerKey.colSuperGlobal).doc(ServerKey.docAmolTemplates);
+      final amolSnap = await amolDoc.get();
+      if (!amolSnap.exists ||
+          amolSnap.data() == null ||
+          (amolSnap.data()?['items'] as List?)?.isEmpty == true) {
+        await amolDoc.set({
+          'items': getDefaultAmols().map((a) => a.toMap()).toList(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('Auto-seeded super_global/amol_templates to Firestore successfully!');
+      }
+
+      // 3. Seed app_config/fcm_config template placeholder if missing
+      final fcmDoc = _firestore.collection(ServerKey.colAppConfig).doc(ServerKey.docFcmConfig);
+      final fcmSnap = await fcmDoc.get();
+      if (!fcmSnap.exists) {
+        await fcmDoc.set({
+          'serverKey': '',
+          'note': 'Paste Firebase Cloud Messaging Legacy Server Key here for remote push',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('Initialized app_config/fcm_config template in Firestore!');
+      }
+    } catch (e) {
+      debugPrint('autoSeedSuperGlobalDefaults error: $e');
+    }
+  }
+
+  /// Add a new custom Surah or Dua directly to Firestore server
+  Future<void> addNewSurahDua(SurahDuaEntity entity) async {
+    try {
+      final docRef = _firestore.collection(ServerKey.colSuperGlobal).doc(ServerKey.docSurahsDuas);
+      await docRef.set({
+        'items': FieldValue.arrayUnion([entity.toMap()]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint('Added new Surah/Dua to Firestore: ${entity.titleBn}');
+    } catch (e) {
+      debugPrint('addNewSurahDua error: $e');
+    }
+  }
 }
 
 final amolTemplatesProvider = StreamProvider<List<AmolItem>>((ref) {
   return AmolService().streamAmolTemplates();
 });
+
+final surahsDuasProvider = StreamProvider<List<SurahDuaEntity>>((ref) {
+  return AmolService().streamSurahsAndDuas();
+});
+

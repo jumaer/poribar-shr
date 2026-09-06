@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
 import '../../../../core/services/network_status_service.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/widgets/glass_button.dart';
 import '../../../../core/widgets/glass_text_field.dart';
 import '../../../../core/widgets/global_bottom_sheet.dart';
+import '../../../camera/presentation/screens/custom_camera_screen.dart';
 import '../../domain/entities/expense_category.dart';
 import '../../domain/entities/expense_entity.dart';
 import '../providers/category_provider.dart';
@@ -36,6 +38,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
   final _purposeController = TextEditingController();
   final _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
+  DateTime? _dueDate;
   TransactionType _type = TransactionType.expense;
   LedgerCategory _categoryScope = LedgerCategory.family;
   ExpenseCategory? _selectedCategory;
@@ -50,21 +53,15 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
 
   Future<void> _captureFromCamera() async {
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
-      if (picked != null) {
-        final bytes = await picked.readAsBytes();
+      final base64 = await CustomCameraScreen.open(context);
+      if (base64 != null && base64.isNotEmpty) {
         if (!mounted) return;
         setState(() {
-          _attachedImageBase64 = FirestoreImageService.bytesToBase64(bytes);
+          _attachedImageBase64 = base64;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('ক্যামেরা থেকে রসিদের ছবি সফলভাবে যুক্ত হয়েছে!'),
+            content: Text('স্বচ্ছ ক্যামেরা থেকে রসিদের ছবি সফলভাবে যুক্ত হয়েছে!'),
             backgroundColor: AppColors.primaryGreen,
             duration: Duration(seconds: 2),
           ),
@@ -122,6 +119,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
     final user = ref.watch(authUserProvider);
     final isAdmin = user?.role == 'admin' || user?.isFamilyOwner == true;
     final isOnline = ref.watch(networkStatusProvider);
+    final l10n = ref.watch(appLocalizationsProvider);
 
     _selectedCategory ??= categories.first;
 
@@ -178,7 +176,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'আমার ব্যক্তিগত খতিয়ান',
+                        l10n.translate('personal_scope'),
                         style: TextStyle(
                           color: _categoryScope == LedgerCategory.personal ? AppColors.primaryGreen : AppColors.textSecondary,
                           fontWeight: FontWeight.bold,
@@ -200,7 +198,7 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                       ),
                       alignment: Alignment.center,
                       child: Text(
-                        'পারিবারিক যৌথ খতিয়ান',
+                        l10n.translate('family_scope'),
                         style: TextStyle(
                           color: _categoryScope == LedgerCategory.family ? AppColors.primaryGreen : AppColors.textSecondary,
                           fontWeight: FontWeight.bold,
@@ -225,11 +223,11 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildTypeSegment('খরচ', TransactionType.expense, AppColors.primaryRed),
-                  _buildTypeSegment('আয়', TransactionType.income, AppColors.primaryGreen),
-                  _buildTypeSegment('সঞ্চয়', TransactionType.savings, AppColors.primaryBlue),
-                  _buildTypeSegment('পাওনা (দিয়েছি)', TransactionType.loanGiven, const Color(0xFF10B981)),
-                  _buildTypeSegment('দেনা (নিয়েছি)', TransactionType.loanTaken, const Color(0xFFF59E0B)),
+                  _buildTypeSegment(l10n.translate('tab_expense'), TransactionType.expense, AppColors.primaryRed),
+                  _buildTypeSegment(l10n.translate('tab_income'), TransactionType.income, AppColors.primaryGreen),
+                  _buildTypeSegment(l10n.translate('tab_savings'), TransactionType.savings, AppColors.primaryBlue),
+                  _buildTypeSegment(l10n.translate('loan_given'), TransactionType.loanGiven, const Color(0xFF10B981)),
+                  _buildTypeSegment(l10n.translate('loan_taken'), TransactionType.loanTaken, const Color(0xFFF59E0B)),
                 ],
               ),
             ),
@@ -333,6 +331,32 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
           hint: 'প্রয়োজনে বিস্তারিত নোট লিখুন...',
           maxLines: 2,
           prefixIcon: Icons.notes_outlined,
+        ),
+        const SizedBox(height: 10),
+        GlassTextField(
+          controller: TextEditingController(
+            text: _dueDate != null
+                ? '${_dueDate!.day}/${_dueDate!.month}/${_dueDate!.year} (সকাল ৭টা, ৮টা, ১২টায় অ্যালার্ম)'
+                : 'পরিশোধের শেষ তারিখ (ঐচ্ছিক অ্যালার্ম)',
+          ),
+          label: 'পরিশোধের শেষ তারিখ ও অ্যালার্ম',
+          readOnly: true,
+          prefixIcon: Icons.alarm_on_outlined,
+          suffixIcon: _dueDate != null
+              ? IconButton(
+                  icon: const Icon(Icons.close, size: 18, color: AppColors.primaryRed),
+                  onPressed: () => setState(() => _dueDate = null),
+                )
+              : null,
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now().add(const Duration(days: 1)),
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+            );
+            if (picked != null) setState(() => _dueDate = picked);
+          },
         ),
         const SizedBox(height: 12),
         Row(
@@ -498,6 +522,16 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                     purpose: purposeText,
                     amount: amount,
                     imageUrl: imagePath,
+                  );
+                }
+
+                // Case 7: Schedule exact alarms on due date at 7:00 AM, 8:00 AM, and 12:00 PM
+                if (_dueDate != null) {
+                  NotificationService().scheduleDueDatePaymentAlarms(
+                    baseId: DateTime.now().millisecondsSinceEpoch.remainder(10000),
+                    title: purposeText,
+                    amount: amount,
+                    dueDate: _dueDate!,
                   );
                 }
 

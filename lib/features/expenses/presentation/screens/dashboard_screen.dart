@@ -1488,27 +1488,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       : null,
                 ),
                 alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.person_rounded,
-                      size: 16,
-                      color: isPersonal ? Colors.black : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.person_rounded,
+                        size: 16,
+                        color: isPersonal ? Colors.black : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
                         '${l10n.translate('my_tab')} (৳ ${personalSum.toStringAsFixed(0)})',
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isPersonal ? Colors.black : AppColors.textSecondary,
                           fontWeight: isPersonal ? FontWeight.w800 : FontWeight.w500,
                           fontSize: 12.5,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1546,27 +1547,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       : null,
                 ),
                 alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.group_rounded,
-                      size: 16,
-                      color: !isPersonal ? Colors.black : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.group_rounded,
+                        size: 16,
+                        color: !isPersonal ? Colors.black : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
                         '${l10n.translate('family_tab')} (৳ ${familySum.toStringAsFixed(0)})',
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: !isPersonal ? Colors.black : AppColors.textSecondary,
                           fontWeight: !isPersonal ? FontWeight.w800 : FontWeight.w500,
                           fontSize: 12.5,
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -1,69 +1,161 @@
-import 'dart:typed_data';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/l10n/l10n_provider.dart';
 import '../../../../core/services/firestore_image_service.dart';
-import '../../../../core/theme/glass_theme.dart';
-import '../../../../core/widgets/glass_button.dart';
 
 class CustomCameraScreen extends ConsumerStatefulWidget {
   const CustomCameraScreen({super.key});
+
+  static Future<String?> open(BuildContext context) async {
+    return Navigator.push<String?>(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomCameraScreen()),
+    );
+  }
 
   @override
   ConsumerState<CustomCameraScreen> createState() => _CustomCameraScreenState();
 }
 
-class _CustomCameraScreenState extends ConsumerState<CustomCameraScreen> {
+class _CustomCameraScreenState extends ConsumerState<CustomCameraScreen> with WidgetsBindingObserver {
+  CameraController? _controller;
+  List<CameraDescription> _cameras = [];
+  int _selectedCameraIndex = 0;
+  bool _isInitializing = true;
+  bool _isTakingPicture = false;
+  FlashMode _flashMode = FlashMode.auto;
+  String? _previewBase64;
+  Uint8List? _previewBytes;
   final ImagePicker _picker = ImagePicker();
-  Uint8List? _capturedBytes;
-  String? _base64Data;
-  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    // Auto trigger camera on screen open
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _takePhoto();
-    });
+    WidgetsBinding.instance.addObserver(this);
+    _initializeCamera();
   }
 
-  Future<void> _takePhoto() async {
-    final l10n = ref.read(appLocalizationsProvider);
-    setState(() => _isProcessing = true);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    if (state == AppLifecycleState.inactive) {
+      controller.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initSelectedCamera();
+    }
+  }
+
+  Future<void> _initializeCamera() async {
     try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 80,
-      );
-      if (picked != null) {
-        final bytes = await picked.readAsBytes();
+      _cameras = await availableCameras();
+      if (_cameras.isNotEmpty) {
+        await _initSelectedCamera();
+      } else {
+        setState(() => _isInitializing = false);
+      }
+    } catch (e) {
+      debugPrint('Error getting cameras: $e');
+      if (mounted) setState(() => _isInitializing = false);
+    }
+  }
+
+  Future<void> _initSelectedCamera() async {
+    if (_cameras.isEmpty) return;
+    setState(() => _isInitializing = true);
+
+    final prev = _controller;
+    _controller = null;
+    await prev?.dispose();
+
+    final camera = _cameras[_selectedCameraIndex];
+    final controller = CameraController(
+      camera,
+      ResolutionPreset.high,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
+
+    try {
+      await controller.initialize();
+      await controller.setFlashMode(_flashMode);
+      if (mounted) {
         setState(() {
-          _capturedBytes = bytes;
-          _base64Data = FirestoreImageService.bytesToBase64(bytes);
+          _controller = controller;
+          _isInitializing = false;
         });
       }
     } catch (e) {
+      debugPrint('Camera init error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${l10n.translate('camera_open_error')}: $e'),
-            backgroundColor: AppColors.primaryRed,
-          ),
-        );
+        setState(() => _isInitializing = false);
       }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _toggleFlash() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    FlashMode nextMode;
+    if (_flashMode == FlashMode.off) {
+      nextMode = FlashMode.auto;
+    } else if (_flashMode == FlashMode.auto) {
+      nextMode = FlashMode.always;
+    } else {
+      nextMode = FlashMode.off;
+    }
+
+    try {
+      await controller.setFlashMode(nextMode);
+      setState(() => _flashMode = nextMode);
+    } catch (_) {}
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameras.length < 2) return;
+    _selectedCameraIndex = (_selectedCameraIndex + 1) % _cameras.length;
+    await _initSelectedCamera();
+  }
+
+  Future<void> _capturePhoto() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || _isTakingPicture) return;
+
+    HapticFeedback.mediumImpact();
+    setState(() => _isTakingPicture = true);
+
+    try {
+      final xfile = await controller.takePicture();
+      final bytes = await xfile.readAsBytes();
+      final base64 = FirestoreImageService.bytesToBase64(bytes);
+
+      if (mounted) {
+        setState(() {
+          _previewBytes = bytes;
+          _previewBase64 = base64;
+          _isTakingPicture = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error taking photo: $e');
+      if (mounted) setState(() => _isTakingPicture = false);
     }
   }
 
   Future<void> _pickFromGallery() async {
-    final l10n = ref.read(appLocalizationsProvider);
-    setState(() => _isProcessing = true);
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -73,186 +165,357 @@ class _CustomCameraScreenState extends ConsumerState<CustomCameraScreen> {
       );
       if (picked != null) {
         final bytes = await picked.readAsBytes();
-        setState(() {
-          _capturedBytes = bytes;
-          _base64Data = FirestoreImageService.bytesToBase64(bytes);
-        });
+        final base64 = FirestoreImageService.bytesToBase64(bytes);
+        if (mounted) {
+          setState(() {
+            _previewBytes = bytes;
+            _previewBase64 = base64;
+          });
+        }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${l10n.translate('gallery_open_error')}: $e'),
-            backgroundColor: AppColors.primaryRed,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      debugPrint('Gallery picker error: $e');
     }
+  }
+
+  void _confirmAndUsePhoto() {
+    if (_previewBase64 != null) {
+      Navigator.pop(context, _previewBase64);
+    }
+  }
+
+  void _retakePhoto() {
+    setState(() {
+      _previewBytes = null;
+      _previewBase64 = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(appLocalizationsProvider);
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Container(
-              color: const Color(0xFF0F172A),
-              child: Center(
-                child: _capturedBytes != null
-                    ? Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.accentGreen, width: 2),
+          // 1. Real-time Camera Preview or Captured Image
+          if (_previewBytes != null)
+            Positioned.fill(
+              child: Image.memory(
+                _previewBytes!,
+                fit: BoxFit.contain,
+              ),
+            )
+          else if (_controller != null && _controller!.value.isInitialized)
+            Positioned.fill(
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: CameraPreview(_controller!),
+              ),
+            )
+          else
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
+                child: Center(
+                  child: _isInitializing
+                      ? const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(AppColors.primaryGreen))
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 54),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.translate('camera_initialize_error'),
+                              style: const TextStyle(color: Colors.white70, fontSize: 14),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryGreen,
+                                foregroundColor: Colors.black,
+                              ),
+                              onPressed: _pickFromGallery,
+                              icon: const Icon(Icons.photo_library_outlined),
+                              label: Text(l10n.translate('receipt_camera')),
+                            ),
+                          ],
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.memory(
-                            _capturedBytes!,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                ),
+              ),
+            ),
+
+          // 2. Transparent Viewfinder Overlay (when live previewing)
+          if (_previewBytes == null && _controller != null && _controller!.value.isInitialized)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Stack(
+                  children: [
+                    // Dark semi-transparent scrim around receipt box
+                    ColorFiltered(
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withValues(alpha: 0.55),
+                        BlendMode.srcOut,
+                      ),
+                      child: Stack(
                         children: [
                           Container(
-                            width: 280,
-                            height: 360,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: AppColors.glassBorder,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              color: Colors.white.withValues(alpha: 0.03),
+                            decoration: const BoxDecoration(
+                              color: Colors.transparent,
+                              backgroundBlendMode: BlendMode.dstOut,
                             ),
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.camera_alt_outlined,
-                                    size: 64,
-                                    color: AppColors.accentGreen.withValues(alpha: 0.8),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    l10n.translate('camera_box_title'),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    child: Text(
-                                      l10n.translate('camera_box_subtitle'),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      ElevatedButton.icon(
-                                        onPressed: _isProcessing ? null : _takePhoto,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primaryGreen,
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                        icon: const Icon(Icons.camera_alt, size: 18),
-                                        label: Text(l10n.translate('camera')),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      OutlinedButton.icon(
-                                        onPressed: _isProcessing ? null : _pickFromGallery,
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.amber,
-                                          side: const BorderSide(color: Colors.amber),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                        icon: const Icon(Icons.photo_library, size: 18),
-                                        label: Text(l10n.translate('gallery')),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                          ),
+                          Center(
+                            child: Container(
+                              width: size.width * 0.82,
+                              height: size.height * 0.55,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                             ),
                           ),
                         ],
                       ),
+                    ),
+
+                    // Viewfinder border reticle
+                    Center(
+                      child: Container(
+                        width: size.width * 0.82,
+                        height: size.height * 0.55,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.8), width: 2),
+                        ),
+                        child: Stack(
+                          children: [
+                            // Corner brackets
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    top: BorderSide(color: AppColors.accentGreen, width: 3),
+                                    left: BorderSide(color: AppColors.accentGreen, width: 3),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    top: BorderSide(color: AppColors.accentGreen, width: 3),
+                                    right: BorderSide(color: AppColors.accentGreen, width: 3),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              left: 8,
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(color: AppColors.accentGreen, width: 3),
+                                    left: BorderSide(color: AppColors.accentGreen, width: 3),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(color: AppColors.accentGreen, width: 3),
+                                    right: BorderSide(color: AppColors.accentGreen, width: 3),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Hint text below scanner
+                    Positioned(
+                      top: size.height * 0.76,
+                      left: 20,
+                      right: 20,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Text(
+                            l10n.translate('camera_scan_hint'),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+
+          // 3. Top Floating Glass Bar
           Positioned(
-            top: 48,
-            left: 20,
-            right: 20,
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            right: 16,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                GlassBox(
-                  borderRadius: 30,
-                  padding: const EdgeInsets.all(8),
+                // Back button
+                CircleAvatar(
+                  backgroundColor: Colors.black45,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
-                Text(
-                  l10n.translate('camera_scanner_title'),
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 48),
+
+                if (_previewBytes == null) ...[
+                  // Flash toggle
+                  CircleAvatar(
+                    backgroundColor: Colors.black45,
+                    child: IconButton(
+                      icon: Icon(
+                        _flashMode == FlashMode.always
+                            ? Icons.flash_on
+                            : (_flashMode == FlashMode.auto ? Icons.flash_auto : Icons.flash_off),
+                        color: _flashMode == FlashMode.always ? AppColors.accentGreen : Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: _toggleFlash,
+                    ),
+                  ),
+
+                  // Camera switch
+                  if (_cameras.length > 1)
+                    CircleAvatar(
+                      backgroundColor: Colors.black45,
+                      child: IconButton(
+                        icon: const Icon(Icons.flip_camera_ios_outlined, color: Colors.white, size: 20),
+                        onPressed: _switchCamera,
+                      ),
+                    ),
+                ],
               ],
             ),
           ),
-          if (_capturedBytes != null)
-            Positioned(
-              bottom: 40,
-              left: 20,
-              right: 20,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GlassButton(
-                      text: l10n.translate('camera_retake'),
-                      isRed: true,
-                      icon: Icons.refresh,
-                      onPressed: _takePhoto,
-                    ),
+
+          // 4. Bottom Controls Bar
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 24,
+            left: 24,
+            right: 24,
+            child: _previewBytes != null
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Retake button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white38),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          backgroundColor: Colors.black54,
+                        ),
+                        onPressed: _retakePhoto,
+                        icon: const Icon(Icons.refresh, color: AppColors.primaryRed),
+                        label: Text(l10n.translate('retake_photo')),
+                      ),
+
+                      // Use photo button
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryGreen,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: _confirmAndUsePhoto,
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: Text(
+                          l10n.translate('use_photo'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Gallery import button
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.white12,
+                        child: IconButton(
+                          icon: const Icon(Icons.photo_library_outlined, color: Colors.white, size: 22),
+                          onPressed: _pickFromGallery,
+                        ),
+                      ),
+
+                      // Shutter Capture Button
+                      GestureDetector(
+                        onTap: _isTakingPicture ? null : _capturePhoto,
+                        child: Container(
+                          width: 74,
+                          height: 74,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                            color: Colors.transparent,
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 58,
+                              height: 58,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.primaryGreen,
+                              ),
+                              child: _isTakingPicture
+                                  ? const CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation(Colors.black),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Spacer placeholder to balance gallery icon
+                      const SizedBox(width: 48),
+                    ],
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: GlassButton(
-                      text: l10n.translate('camera_save'),
-                      icon: Icons.check,
-                      onPressed: () => Navigator.pop(context, _base64Data),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          ),
         ],
       ),
     );
