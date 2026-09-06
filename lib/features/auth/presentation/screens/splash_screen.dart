@@ -41,13 +41,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       );
     });
 
-    Future.delayed(const Duration(milliseconds: 1800), () async {
+    Future.delayed(const Duration(milliseconds: 1400), () async {
       if (mounted) {
         final loggedIn = await ref.read(authUserProvider.notifier).tryAutoLogin();
         if (mounted) {
           final user = ref.read(authUserProvider);
           if (loggedIn && user != null && user.activeFamilyId.isNotEmpty) {
             NotificationService().listenToFamilyNotifications(user.activeFamilyId);
+            NotificationService().initializeNotificationEngine(
+              userIdOrPhone: user.phoneNumber,
+            );
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const DashboardScreen()),
             );

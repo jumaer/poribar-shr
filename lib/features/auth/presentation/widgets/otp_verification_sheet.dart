@@ -98,23 +98,30 @@ class _OtpVerificationSheetState extends ConsumerState<OtpVerificationSheet> {
         verificationFailed: (FirebaseAuthException e) {
           debugPrint('Firebase Phone Auth failure: [${e.code}] ${e.message}');
           if (!mounted) return;
+          final errStr = '${e.code} ${e.message} $e'.toLowerCase();
           String friendly;
-          switch (e.code) {
-            case 'operation-not-allowed':
-              friendly = 'ফায়ারবেস কনসোলে বাংলাদেশ (+880) এর এসএমএস পলিসি অথবা টেস্ট ফোন নম্বর সক্রিয় করুন।';
-              break;
-            case 'invalid-phone-number':
-              friendly = 'মোবাইল নম্বরটি সঠিক নয়। অনুগ্রহ করে সঠিক ১১ ডিজিটের নম্বর দিন।';
-              break;
-            case 'too-many-requests':
-              friendly = 'খুব বেশি রিকোয়েস্ট পাঠানো হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।';
-              break;
-            case 'app-not-verified':
-            case 'developer-error':
-              friendly = 'ফায়ারবেস কনসোলে অ্যাপের SHA-1 ও SHA-256 যোগ করা প্রয়োজন।';
-              break;
-            default:
-              friendly = e.message ?? l10n.translate('otp_verification_failed');
+          if (errStr.contains('billing') || errStr.contains('billing_not_enabled')) {
+            friendly = l10n.language == AppLanguage.bangla
+                ? 'ফায়ারবেস এসএমএস গেটওয়েতে বিলিং অ্যাকাউন্ট (Blaze Plan) সক্রিয় করা প্রয়োজন।'
+                : 'Firebase SMS gateway requires a billing account (Blaze Plan) to send SMS.';
+          } else {
+            switch (e.code) {
+              case 'operation-not-allowed':
+                friendly = 'ফায়ারবেস কনসোলে বাংলাদেশ (+880) এর এসএমএস পলিসি অথবা টেস্ট ফোন নম্বর সক্রিয় করুন।';
+                break;
+              case 'invalid-phone-number':
+                friendly = 'মোবাইল নম্বরটি সঠিক নয়। অনুগ্রহ করে সঠিক ১১ ডিজিটের নম্বর দিন।';
+                break;
+              case 'too-many-requests':
+                friendly = 'খুব বেশি রিকোয়েস্ট পাঠানো হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।';
+                break;
+              case 'app-not-verified':
+              case 'developer-error':
+                friendly = 'ফায়ারবেস কনসোলে অ্যাপের SHA-1 ও SHA-256 যোগ করা প্রয়োজন।';
+                break;
+              default:
+                friendly = e.message ?? l10n.translate('otp_verification_failed');
+            }
           }
           setState(() {
             _isSendingCode = false;
@@ -183,7 +190,7 @@ class _OtpVerificationSheetState extends ConsumerState<OtpVerificationSheet> {
     }
 
     if (_verificationId == null) {
-      setState(() => _errorMessage = l10n.translate('otp_code_not_sent_yet'));
+      setState(() => _errorMessage = _errorMessage ?? l10n.translate('otp_code_not_sent_yet'));
       return;
     }
 

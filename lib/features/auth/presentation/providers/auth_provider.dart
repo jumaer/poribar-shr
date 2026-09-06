@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite/sqflite.dart';
 import '../../../../core/database/app_database.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../../family_management/data/datasources/family_firestore_datasource.dart';
@@ -12,41 +15,165 @@ class AuthUserNotifier extends Notifier<UserEntity?> {
     return null;
   }
 
+  /// Saves the active user entity into SQLite AppSettings and the local users table
+  /// for instant, lifetime offline session persistence.
+  Future<void> _persistUserSession(UserEntity user) async {
+    try {
+      await AppDatabase().appSettingsDao.setSetting('session_phone', user.phoneNumber);
+      await AppDatabase().appSettingsDao.setSetting('session_user_json', user.toJson());
+
+      final db = await AppDatabase().database;
+      await db.insert(
+        'users',
+        {
+          'phoneNumber': user.phoneNumber,
+          'uid': user.uid,
+          'fullName': user.fullName,
+          'activeFamilyId': user.activeFamilyId,
+          'role': user.role,
+          'isFamilyOwner': user.isFamilyOwner ? 1 : 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error persisting user session: $e');
+    }
+  }
+
+  /// Automatically restores the lifetime user session.
+  /// First checks local SQLite cache for instant zero-latency startup.
+  /// Never logs the user out due to offline state or network failure.
   Future<bool> tryAutoLogin() async {
     try {
-      final savedPhone = await AppDatabase().appSettingsDao.getSetting('session_phone');
-      if (savedPhone != null && savedPhone.isNotEmpty) {
-        final data = await _datasource.getUserByPhone(savedPhone);
-        if (data != null) {
-          final familyId = data['activeFamilyId']?.toString() ?? '';
-          if (familyId.isNotEmpty) {
-            final role = data['role']?.toString() ?? 'member';
-            final isOwner = data['isFamilyOwner'] == true;
-            final isAdmin = role == 'admin' || isOwner;
-
-            state = UserEntity(
-              uid: data['uid']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
-              phoneNumber: savedPhone,
-              fullName: data['fullName']?.toString() ?? 'পরিবার সদস্য',
-              photoUrl: data['photoUrl']?.toString(),
-              activeFamilyId: familyId,
-              joinedFamilyIds: List<String>.from(data['joinedFamilyIds'] ?? [familyId]),
-              isFamilyOwner: isOwner,
-              role: role,
-              canAddMembers: isAdmin ? true : (data['canAddMembers'] == true),
-              canSetAlarms: isAdmin ? true : (data['canSetAlarms'] == null ? true : data['canSetAlarms'] == true),
-              canSendPushNotification: isAdmin ? true : (data['canSendPushNotification'] == true),
-              canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
-              canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
-            );
+      // 1. FAST PATH: Instant local restoration from cached session_user_json
+      final cachedUserJson = await AppDatabase().appSettingsDao.getSetting('session_user_json');
+      if (cachedUserJson != null && cachedUserJson.isNotEmpty) {
+        try {
+          final user = UserEntity.fromJson(cachedUserJson);
+          if (user.phoneNumber.isNotEmpty && user.activeFamilyId.isNotEmpty) {
+            state = user;
+            // Non-blocking background sync for remote updates
+            _syncUserInBackground(user.phoneNumber);
             return true;
           }
+        } catch (e) {
+          debugPrint('Error parsing cached session_user_json: $e');
+        }
+      }
+
+      // 2. SECONDARY LOCAL PATH: Restore from SQLite users table using saved session_phone
+      final savedPhone = await AppDatabase().appSettingsDao.getSetting('session_phone');
+      if (savedPhone != null && savedPhone.isNotEmpty) {
+        try {
+          final db = await AppDatabase().database;
+          final localRows = await db.query(
+            'users',
+            where: 'phoneNumber = ?',
+            whereArgs: [savedPhone],
+            limit: 1,
+          );
+          if (localRows.isNotEmpty) {
+            final row = localRows.first;
+            final familyId = row['activeFamilyId']?.toString() ?? '';
+            if (familyId.isNotEmpty) {
+              final role = row['role']?.toString() ?? 'member';
+              final isOwner = (row['isFamilyOwner'] == 1 || row['isFamilyOwner'] == true);
+              final isAdmin = role == 'admin' || isOwner;
+              final user = UserEntity(
+                uid: row['uid']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
+                phoneNumber: savedPhone,
+                fullName: row['fullName']?.toString() ?? 'পরিবার সদস্য',
+                activeFamilyId: familyId,
+                joinedFamilyIds: [familyId],
+                isFamilyOwner: isOwner,
+                role: role,
+                canAddMembers: isAdmin,
+                canSetAlarms: true,
+                canSendPushNotification: isAdmin,
+                canViewExpenses: true,
+                canUpload: true,
+              );
+              state = user;
+              await _persistUserSession(user);
+              _syncUserInBackground(savedPhone);
+              return true;
+            }
+          }
+        } catch (e) {
+          debugPrint('Error loading user from local SQLite table: $e');
+        }
+
+        // 3. REMOTE FALLBACK: Network query with short timeout (non-hanging)
+        try {
+          final data = await _datasource.getUserByPhone(savedPhone).timeout(
+            const Duration(seconds: 4),
+          );
+          if (data != null) {
+            final familyId = data['activeFamilyId']?.toString() ?? '';
+            if (familyId.isNotEmpty) {
+              final role = data['role']?.toString() ?? 'member';
+              final isOwner = data['isFamilyOwner'] == true;
+              final isAdmin = role == 'admin' || isOwner;
+
+              final user = UserEntity(
+                uid: data['uid']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
+                phoneNumber: savedPhone,
+                fullName: data['fullName']?.toString() ?? 'পরিবার সদস্য',
+                photoUrl: data['photoUrl']?.toString(),
+                activeFamilyId: familyId,
+                joinedFamilyIds: List<String>.from(data['joinedFamilyIds'] ?? [familyId]),
+                isFamilyOwner: isOwner,
+                role: role,
+                canAddMembers: isAdmin ? true : (data['canAddMembers'] == true),
+                canSetAlarms: isAdmin ? true : (data['canSetAlarms'] == null ? true : data['canSetAlarms'] == true),
+                canSendPushNotification: isAdmin ? true : (data['canSendPushNotification'] == true),
+                canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
+                canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
+              );
+
+              state = user;
+              await _persistUserSession(user);
+              return true;
+            }
+          }
+        } catch (e) {
+          debugPrint('Remote auto-login timeout/error: $e');
         }
       }
     } catch (e) {
       debugPrint('Auto login error: $e');
     }
     return false;
+  }
+
+  void _syncUserInBackground(String phoneNumber) {
+    Future.microtask(() async {
+      try {
+        final data = await _datasource.getUserByPhone(phoneNumber);
+        if (data != null && state != null && state!.phoneNumber == phoneNumber) {
+          final role = data['role']?.toString() ?? state!.role;
+          final isOwner = data['isFamilyOwner'] == true || state!.isFamilyOwner;
+          final isAdmin = role == 'admin' || isOwner;
+
+          final updated = state!.copyWith(
+            fullName: data['fullName']?.toString(),
+            photoUrl: data['photoUrl']?.toString(),
+            activeFamilyId: data['activeFamilyId']?.toString(),
+            role: role,
+            isFamilyOwner: isOwner,
+            canAddMembers: isAdmin ? true : (data['canAddMembers'] == true),
+            canSetAlarms: isAdmin ? true : (data['canSetAlarms'] == null ? true : data['canSetAlarms'] == true),
+            canSendPushNotification: isAdmin ? true : (data['canSendPushNotification'] == true),
+            canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
+            canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
+          );
+          state = updated;
+          await _persistUserSession(updated);
+        }
+      } catch (e) {
+        debugPrint('Silent background user sync: $e');
+      }
+    });
   }
 
   Future<void> signUp({
@@ -107,9 +234,7 @@ class AuthUserNotifier extends Notifier<UserEntity?> {
       'joinedAt': DateTime.now().toIso8601String(),
     });
 
-    await AppDatabase().appSettingsDao.setSetting('session_phone', cleanPhone);
-
-    state = UserEntity(
+    final newUser = UserEntity(
       uid: uid,
       phoneNumber: cleanPhone,
       fullName: fullName,
@@ -119,6 +244,9 @@ class AuthUserNotifier extends Notifier<UserEntity?> {
       isFamilyOwner: true,
       role: 'admin',
     );
+
+    state = newUser;
+    await _persistUserSession(newUser);
   }
 
   Future<void> login({
@@ -175,11 +303,9 @@ class AuthUserNotifier extends Notifier<UserEntity?> {
       });
     }
 
-    await AppDatabase().appSettingsDao.setSetting('session_phone', cleanPhone);
-
     final isAdmin = role == 'admin' || isOwner;
 
-    state = UserEntity(
+    final user = UserEntity(
       uid: data['uid']?.toString() ?? 'usr_${DateTime.now().millisecondsSinceEpoch}',
       phoneNumber: cleanPhone,
       fullName: data['fullName']?.toString() ?? 'পরিবার সদস্য',
@@ -194,37 +320,54 @@ class AuthUserNotifier extends Notifier<UserEntity?> {
       canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
       canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
     );
+
+    state = user;
+    await _persistUserSession(user);
   }
 
   Future<void> reloadUser() async {
     if (state == null) return;
-    final data = await _datasource.getUserByPhone(state!.phoneNumber);
-    if (data != null) {
-      final role = data['role']?.toString() ?? state!.role;
-      final isOwner = data['isFamilyOwner'] == true || state!.isFamilyOwner;
-      final isAdmin = role == 'admin' || isOwner;
+    try {
+      final data = await _datasource.getUserByPhone(state!.phoneNumber);
+      if (data != null && state != null) {
+        final role = data['role']?.toString() ?? state!.role;
+        final isOwner = data['isFamilyOwner'] == true || state!.isFamilyOwner;
+        final isAdmin = role == 'admin' || isOwner;
 
-      state = state!.copyWith(
-        fullName: data['fullName']?.toString(),
-        photoUrl: data['photoUrl']?.toString(),
-        activeFamilyId: data['activeFamilyId']?.toString(),
-        role: role,
-        isFamilyOwner: isOwner,
-        canAddMembers: isAdmin ? true : (data['canAddMembers'] == true),
-        canSetAlarms: isAdmin ? true : (data['canSetAlarms'] == null ? true : data['canSetAlarms'] == true),
-        canSendPushNotification: isAdmin ? true : (data['canSendPushNotification'] == true),
-        canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
-        canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
-      );
+        final updated = state!.copyWith(
+          fullName: data['fullName']?.toString(),
+          photoUrl: data['photoUrl']?.toString(),
+          activeFamilyId: data['activeFamilyId']?.toString(),
+          role: role,
+          isFamilyOwner: isOwner,
+          canAddMembers: isAdmin ? true : (data['canAddMembers'] == true),
+          canSetAlarms: isAdmin ? true : (data['canSetAlarms'] == null ? true : data['canSetAlarms'] == true),
+          canSendPushNotification: isAdmin ? true : (data['canSendPushNotification'] == true),
+          canViewExpenses: isAdmin ? true : (data['canViewExpenses'] == null ? true : data['canViewExpenses'] == true),
+          canUpload: isAdmin ? true : (data['canUpload'] == null ? true : data['canUpload'] == true),
+        );
+        state = updated;
+        await _persistUserSession(updated);
+      }
+    } catch (e) {
+      debugPrint('reloadUser error: $e');
     }
   }
 
-  void logout() {
-    AppDatabase().appSettingsDao.removeSetting('session_phone');
-    state = null;
+  Future<void> logout() async {
+    try {
+      await AppDatabase().appSettingsDao.removeSetting('session_phone');
+      await AppDatabase().appSettingsDao.removeSetting('session_user_json');
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      debugPrint('Logout cleanup error: $e');
+    } finally {
+      state = null;
+    }
   }
 }
 
 final authUserProvider = NotifierProvider<AuthUserNotifier, UserEntity?>(
   AuthUserNotifier.new,
 );
+

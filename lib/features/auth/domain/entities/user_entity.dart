@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class UserEntity {
   final String uid;
   final String phoneNumber;
@@ -30,6 +32,60 @@ class UserEntity {
   });
 
   bool get isAdmin => role == 'admin' || isFamilyOwner;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'phoneNumber': phoneNumber,
+      'fullName': fullName,
+      'photoUrl': photoUrl,
+      'activeFamilyId': activeFamilyId,
+      'joinedFamilyIds': joinedFamilyIds,
+      'isFamilyOwner': isFamilyOwner,
+      'role': role,
+      'canAddMembers': canAddMembers,
+      'canSetAlarms': canSetAlarms,
+      'canSendPushNotification': canSendPushNotification,
+      'canViewExpenses': canViewExpenses,
+      'canUpload': canUpload,
+    };
+  }
+
+  factory UserEntity.fromMap(Map<String, dynamic> map) {
+    final familyId = map['activeFamilyId']?.toString() ?? '';
+    final role = map['role']?.toString() ?? 'member';
+    final isOwner = map['isFamilyOwner'] == true || map['isFamilyOwner'] == 1;
+    final isAdmin = role == 'admin' || isOwner;
+
+    List<String> families = [];
+    if (map['joinedFamilyIds'] is List) {
+      families = (map['joinedFamilyIds'] as List).map((e) => e.toString()).toList();
+    }
+    if (families.isEmpty && familyId.isNotEmpty) {
+      families = [familyId];
+    }
+
+    return UserEntity(
+      uid: map['uid']?.toString() ?? '',
+      phoneNumber: map['phoneNumber']?.toString() ?? '',
+      fullName: map['fullName']?.toString() ?? '',
+      photoUrl: map['photoUrl']?.toString(),
+      activeFamilyId: familyId,
+      joinedFamilyIds: families,
+      isFamilyOwner: isOwner,
+      role: role,
+      canAddMembers: isAdmin ? true : (map['canAddMembers'] == true || map['canAddMembers'] == 1),
+      canSetAlarms: isAdmin ? true : (map['canSetAlarms'] == null ? true : (map['canSetAlarms'] == true || map['canSetAlarms'] == 1)),
+      canSendPushNotification: isAdmin ? true : (map['canSendPushNotification'] == true || map['canSendPushNotification'] == 1),
+      canViewExpenses: isAdmin ? true : (map['canViewExpenses'] == null ? true : (map['canViewExpenses'] == true || map['canViewExpenses'] == 1)),
+      canUpload: isAdmin ? true : (map['canUpload'] == null ? true : (map['canUpload'] == true || map['canUpload'] == 1)),
+    );
+  }
+
+  String toJson() => json.encode(toMap());
+
+  factory UserEntity.fromJson(String source) =>
+      UserEntity.fromMap(json.decode(source) as Map<String, dynamic>);
 
   UserEntity copyWith({
     String? uid,

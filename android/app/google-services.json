@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "1052479560086",
+    "firebase_url": "https://srsapp-38f24-default-rtdb.firebaseio.com",
     "project_id": "srsapp-38f24",
     "storage_bucket": "srsapp-38f24.firebasestorage.app"
   },

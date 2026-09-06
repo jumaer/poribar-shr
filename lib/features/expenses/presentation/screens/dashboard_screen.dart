@@ -462,7 +462,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               final navigator = Navigator.of(context);
-              ref.read(authUserProvider.notifier).logout();
+              await ref.read(authUserProvider.notifier).logout();
               navigator.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (route) => false,
