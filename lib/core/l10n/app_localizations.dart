@@ -1125,6 +1125,58 @@ class AppLocalizations {
       AppLanguage.bangla: 'পরিবারের আমল বোর্ড',
       AppLanguage.english: 'Family Amol Board',
     },
+    'personal_scope': {
+      AppLanguage.bangla: 'ব্যক্তিগত',
+      AppLanguage.english: 'Personal',
+    },
+    'family_scope': {
+      AppLanguage.bangla: 'পারিবারিক',
+      AppLanguage.english: 'Family',
+    },
+    'tab_expense': {
+      AppLanguage.bangla: 'খরচ',
+      AppLanguage.english: 'Expense',
+    },
+    'tab_income': {
+      AppLanguage.bangla: 'আয়',
+      AppLanguage.english: 'Income',
+    },
+    'tab_savings': {
+      AppLanguage.bangla: 'সঞ্চয়',
+      AppLanguage.english: 'Savings',
+    },
+    'loan_given': {
+      AppLanguage.bangla: 'ধার প্রদান',
+      AppLanguage.english: 'Loan Given',
+    },
+    'loan_taken': {
+      AppLanguage.bangla: 'ধার গ্রহণ',
+      AppLanguage.english: 'Loan Taken',
+    },
+    'empty_data': {
+      AppLanguage.bangla: 'কোনো বার্তা বা তথ্য নেই',
+      AppLanguage.english: 'No data available',
+    },
+    'no_data': {
+      AppLanguage.bangla: 'কোনো তথ্য নেই',
+      AppLanguage.english: 'No data',
+    },
+    'dashboard': {
+      AppLanguage.bangla: 'ড্যাশবোর্ড',
+      AppLanguage.english: 'Dashboard',
+    },
+    'expense': {
+      AppLanguage.bangla: 'খরচ',
+      AppLanguage.english: 'Expense',
+    },
+    'income': {
+      AppLanguage.bangla: 'আয়',
+      AppLanguage.english: 'Income',
+    },
+    'savings': {
+      AppLanguage.bangla: 'সঞ্চয়',
+      AppLanguage.english: 'Savings',
+    },
   };
 
   String translate(String key, [Map<String, String>? params]) {

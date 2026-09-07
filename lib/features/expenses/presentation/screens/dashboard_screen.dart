@@ -493,7 +493,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isAdmin = user?.isAdmin ?? false;
     final userName = user?.fullName != null && user!.fullName.isNotEmpty ? user.fullName : 'ব্যবহারকারী';
     final userPhone = user?.phoneNumber ?? '';
-    final familyId = user?.activeFamilyId ?? '';
 
     return Drawer(
       backgroundColor: Colors.transparent,
@@ -596,17 +595,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               fontSize: 12,
                             ),
                           ),
-                          if (familyId.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              'ID: $familyId',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
