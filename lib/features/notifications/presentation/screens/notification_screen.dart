@@ -44,7 +44,12 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
         for (final m in members) {
           final name = m['name']?.toString() ?? 'সদস্য';
           final relation = m['relation']?.toString() ?? 'সম্পর্ক';
-          memberNames.add('$name ($relation)');
+          final phone = m['phoneNumber']?.toString() ?? '';
+          if (phone.isNotEmpty) {
+            memberNames.add('$name ($relation) [$phone]');
+          } else {
+            memberNames.add('$name ($relation)');
+          }
         }
       } catch (_) {}
     }

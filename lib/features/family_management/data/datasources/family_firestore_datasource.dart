@@ -326,19 +326,70 @@ class FamilyFirestoreDatasource {
     required String newFamilyId,
     required Map<String, dynamic> memberData,
   }) async {
+    Map<String, dynamic>? inviteDocData;
+    try {
+      final docSnap = await _firestore.collection('family_invitations').doc(inviteId).get();
+      if (docSnap.exists) inviteDocData = docSnap.data();
+    } catch (_) {}
+
     await _firestore.collection('family_invitations').doc(inviteId).update({
       'status': 'accepted',
       'respondedAt': DateTime.now().toIso8601String(),
     });
 
     await addMemberToFamily(newFamilyId, memberData);
+
+    // Broadcast invite acceptance push notification to inviter & family
+    if (inviteDocData != null) {
+      try {
+        final inviterPhone = inviteDocData['inviterPhone']?.toString() ?? '';
+        final memberName = memberData['name']?.toString() ?? 'নতুন সদস্য';
+        final familyName = inviteDocData['familyName']?.toString() ?? 'পারিবারিক খতিয়ান';
+
+        await NotificationService().broadcastFamilyInviteAcceptedNotification(
+          targetPhone: inviterPhone,
+          memberName: memberName,
+          familyName: familyName,
+          familyId: newFamilyId,
+        );
+      } catch (e) {
+        debugPrint('Error broadcasting invite accepted notification: $e');
+      }
+    }
   }
 
   Future<void> rejectFamilyInvitation(String inviteId) async {
+    Map<String, dynamic>? inviteDocData;
+    try {
+      final docSnap = await _firestore.collection('family_invitations').doc(inviteId).get();
+      if (docSnap.exists) inviteDocData = docSnap.data();
+    } catch (_) {}
+
     await _firestore.collection('family_invitations').doc(inviteId).update({
       'status': 'rejected',
       'respondedAt': DateTime.now().toIso8601String(),
     });
+
+    // Broadcast invite rejection push notification to inviter
+    if (inviteDocData != null) {
+      try {
+        final inviterPhone = inviteDocData['inviterPhone']?.toString() ?? '';
+        final memberName = inviteDocData['targetName']?.toString() ??
+            inviteDocData['targetPhone']?.toString() ??
+            'আমন্ত্রিত সদস্য';
+        final familyName = inviteDocData['familyName']?.toString() ?? 'পারিবারিক খতিয়ান';
+        final familyId = inviteDocData['familyId']?.toString() ?? '';
+
+        await NotificationService().broadcastFamilyInviteRejectedNotification(
+          targetPhone: inviterPhone,
+          memberName: memberName,
+          familyName: familyName,
+          familyId: familyId,
+        );
+      } catch (e) {
+        debugPrint('Error broadcasting invite rejected notification: $e');
+      }
+    }
   }
 
   String _sanitizePhone(String phone) {

@@ -37,6 +37,7 @@ class SosShakeService {
 
   bool _isEnabled = true;
   bool _isProcessingSos = false;
+  bool isSosDialogActive = false;
   DateTime? _lastShakeTimestamp;
   int _shakeCount = 0;
 
@@ -65,7 +66,7 @@ class SosShakeService {
 
     _accelerometerSub = userAccelerometerEventStream().listen(
       (UserAccelerometerEvent event) {
-        if (!_isEnabled || _isProcessingSos) return;
+        if (!_isEnabled || _isProcessingSos || isSosDialogActive) return;
 
         // Check cooldown window to prevent duplicate triggers
         if (_lastSosTriggeredTime != null &&

@@ -193,14 +193,18 @@ class _EditExpenseSheetState extends ConsumerState<EditExpenseSheet> {
 
       ref.read(expenseListProvider.notifier).addExpense(updated);
 
-      // Case 4: Broadcast entry update notification to other family members
+      // Case 4: Broadcast entry update notification strictly to other family members
       final user = ref.read(authUserProvider);
-      NotificationService().broadcastExpenseUpdateNotification(
+      NotificationService().broadcastTransactionNotification(
         familyId: widget.expense.familyId,
         userName: user?.fullName ?? widget.expense.recordedByUserName,
+        userPhone: user?.phoneNumber ?? '',
         purpose: purposeText,
         amount: amount,
+        transactionType: _type.name,
+        categoryName: _selectedCategory?.nameBn,
         imageUrl: imagePath,
+        isUpdate: true,
       );
 
       if (mounted) Navigator.pop(context);

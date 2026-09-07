@@ -396,30 +396,88 @@ class NotificationService {
     }
   }
 
+  /// Phone number normalization and comparison helper
+  static String normalizePhone(String phone) {
+    return phone.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  static bool isSamePhone(String p1, String p2) {
+    final d1 = normalizePhone(p1);
+    final d2 = normalizePhone(p2);
+    if (d1.isEmpty || d2.isEmpty) return false;
+    if (d1 == d2) return true;
+    if (d1.length >= 10 && d2.length >= 10) {
+      final s1 = d1.substring(d1.length - 10);
+      final s2 = d2.substring(d2.length - 10);
+      return s1 == s2;
+    }
+    return false;
+  }
+
   /// Get active FCM tokens of other family members (strictly excludes the sender)
   Future<List<String>> getOtherFamilyMemberTokens({
     required String familyId,
     required String excludePhone,
   }) async {
+    final tokens = <String>[];
+    if (familyId.isEmpty) return tokens;
+
     try {
-      final cleanExclude = excludePhone.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
+      debugPrint('[FCM Engine] Searching tokens for family "$familyId" (excluding phone: $excludePhone)...');
+
+      // 1. Fetch from families/{familyId}/members subcollection
       final snap = await FirebaseFirestore.instance
           .collection('families')
           .doc(familyId)
           .collection('members')
           .get();
-      final tokens = <String>[];
+
       for (final doc in snap.docs) {
-        if (doc.id == cleanExclude) continue;
-        final token = doc.data()['fcmToken']?.toString();
+        final memberPhone = doc.id;
+        if (isSamePhone(memberPhone, excludePhone)) continue;
+
+        String? token = doc.data()['fcmToken']?.toString();
+        // If missing on member doc, check users collection
+        if (token == null || token.isEmpty) {
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(normalizePhone(memberPhone))
+                .get();
+            token = userDoc.data()?['fcmToken']?.toString();
+          } catch (_) {}
+        }
+
         if (token != null && token.isNotEmpty && !tokens.contains(token)) {
           tokens.add(token);
         }
       }
+
+      // 2. Also search users collection where activeFamilyId == familyId
+      try {
+        final usersSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('activeFamilyId', isEqualTo: familyId)
+            .get();
+
+        for (final doc in usersSnap.docs) {
+          final phone = doc.data()['phoneNumber']?.toString() ?? doc.id;
+          if (isSamePhone(phone, excludePhone)) continue;
+
+          final token = doc.data()['fcmToken']?.toString();
+          if (token != null && token.isNotEmpty && !tokens.contains(token)) {
+            tokens.add(token);
+          }
+        }
+      } catch (e) {
+        debugPrint('[FCM Engine] users activeFamilyId query error: $e');
+      }
+
+      debugPrint('[FCM Engine] Total active tokens found for family members: ${tokens.length}');
       return tokens;
     } catch (e) {
-      debugPrint('Error fetching family member tokens: $e');
-      return [];
+      debugPrint('[FCM Engine] Error fetching family member tokens: $e');
+      return tokens;
     }
   }
 
@@ -433,8 +491,14 @@ class NotificationService {
     String? imageUrl,
     Map<String, dynamic>? extraData,
   }) async {
-    if (tokens.isEmpty) return;
+    if (tokens.isEmpty) {
+      debugPrint('[FCM Engine] Notice: tokens list is empty, push delivery skipped.');
+      return;
+    }
+
     try {
+      debugPrint('[FCM Engine] >>> Preparing FCM Push: "$title" | Body: "$body" | Tokens count: ${tokens.length}');
+
       // Fetch server key from ServerKey or Firestore app_config/fcm_config
       String serverKey = ServerKey.defaultFcmServerKey;
       try {
@@ -442,16 +506,9 @@ class NotificationService {
             await FirebaseFirestore.instance.collection('app_config').doc('fcm_config').get();
         if (configDoc.exists && configDoc.data() != null) {
           final docKey = configDoc.data()?['serverKey']?.toString();
-          if (docKey != null && docKey.isNotEmpty) {
-            serverKey = docKey;
+          if (docKey != null && docKey.trim().isNotEmpty) {
+            serverKey = docKey.trim();
           }
-        } else {
-          // Seed config doc so user knows where to paste key
-          FirebaseFirestore.instance.collection('app_config').doc('fcm_config').set({
-            'serverKey': '',
-            'note': 'Paste Firebase Cloud Messaging Legacy Server Key here for remote push',
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
         }
       } catch (_) {}
 
@@ -489,12 +546,16 @@ class NotificationService {
           headers: headers,
           body: jsonEncode(payload),
         );
-        debugPrint('FCM Push send response: ${res.statusCode} - ${res.body}');
+        debugPrint('[FCM Engine] FCM HTTP response: status ${res.statusCode} | response: ${res.body}');
       } else {
-        debugPrint('FCM Server key empty. FCM notification payload ready for tokens: ${tokens.length}');
+        debugPrint(
+          '[FCM Engine] FCM server key is not configured yet in app_config/fcm_config.\n'
+          '[FCM Engine] Active app devices receive real-time updates via Firestore snapshot listener.\n'
+          '[FCM Engine] For terminated-app delivery, deploy Cloud Functions in functions/ directory.',
+        );
       }
     } catch (e) {
-      debugPrint('sendFcmNotificationToTokens error: $e');
+      debugPrint('[FCM Engine] sendFcmNotificationToTokens error: $e');
     }
   }
 
@@ -524,19 +585,21 @@ class NotificationService {
         final receiverRaw = data['receiverId']?.toString();
         final receiverId = receiverRaw?.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
 
-        final isSentByMe = cleanMyPhone.isNotEmpty && senderPhone == cleanMyPhone;
+        final isSentByMe = cleanMyPhone.isNotEmpty && isSamePhone(senderPhone, cleanMyPhone);
 
-        // Rule 1: NEVER send or show incoming notifications to the sender himself
+        // Rule 1: NEVER send or show incoming notifications to the sender himself (strictly for transactions/edits/custom)
         if (isSentByMe && data['type'] != 'sos_emergency') {
           continue;
         }
 
         // Rule 2: If targeted to a specific receiver (not 'all' or empty), ignore if not for this user
-        if (receiverId != null &&
-            receiverId.isNotEmpty &&
-            receiverId != 'all' &&
-            !receiverId.contains('সবাই') &&
-            receiverId != cleanMyPhone) {
+        final isAll = receiverId == null ||
+            receiverId.isEmpty ||
+            receiverId == 'all' ||
+            receiverId.contains('সবাই') ||
+            receiverId.contains('সকল');
+
+        if (!isAll && !isSamePhone(receiverId, cleanMyPhone)) {
           continue;
         }
 
@@ -728,7 +791,10 @@ class NotificationService {
 
         // 1. Collect target FCM tokens (excluding sender)
         List<String> targetTokens = [];
-        final isAll = receiverId.isEmpty || receiverId.contains('সবাই') || receiverId == 'all';
+        final isAll = receiverId.isEmpty ||
+            receiverId.toLowerCase() == 'all' ||
+            receiverId.contains('সবাই') ||
+            receiverId.contains('সকল');
 
         if (isAll) {
           targetTokens = await getOtherFamilyMemberTokens(
@@ -736,9 +802,9 @@ class NotificationService {
             excludePhone: cleanSender,
           );
         } else {
-          final cleanReceiver = receiverId.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
-          // Do not send to self if sender selected their own name
-          if (cleanReceiver != cleanSender) {
+          // Check if receiverId has phone number digits
+          final cleanReceiver = normalizePhone(receiverId);
+          if (cleanReceiver.length >= 10 && !isSamePhone(cleanReceiver, cleanSender)) {
             final userDoc = await FirebaseFirestore.instance
                 .collection('users')
                 .doc(cleanReceiver)
@@ -747,8 +813,39 @@ class NotificationService {
             if (token != null && token.isNotEmpty) {
               targetTokens.add(token);
             }
+          } else {
+            // Search member by name from family subcollection
+            try {
+              final membersSnap = await FirebaseFirestore.instance
+                  .collection('families')
+                  .doc(familyId)
+                  .collection('members')
+                  .get();
+
+              for (final doc in membersSnap.docs) {
+                if (isSamePhone(doc.id, cleanSender)) continue;
+                final name = doc.data()['name']?.toString() ?? '';
+                if (name.isNotEmpty && receiverId.contains(name)) {
+                  String? token = doc.data()['fcmToken']?.toString();
+                  if (token == null || token.isEmpty) {
+                    final uDoc = await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(normalizePhone(doc.id))
+                        .get();
+                    token = uDoc.data()?['fcmToken']?.toString();
+                  }
+                  if (token != null && token.isNotEmpty && !targetTokens.contains(token)) {
+                    targetTokens.add(token);
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('[FCM Custom Push] Member name lookup error: $e');
+            }
           }
         }
+
+        debugPrint('[FCM Custom Push] Target: ${isAll ? "All Members" : receiverId} | Tokens found: ${targetTokens.length}');
 
         // 2. Dispatch FCM Push so it arrives when app is terminated or in background
         if (targetTokens.isNotEmpty) {
@@ -888,6 +985,183 @@ class NotificationService {
       }
     } catch (e) {
       debugPrint('broadcastFamilyInviteNotification error: $e');
+    }
+  }
+
+  /// Broadcast push when user accepts family join invitation
+  Future<void> broadcastFamilyInviteAcceptedNotification({
+    required String targetPhone,
+    required String memberName,
+    required String familyName,
+    required String familyId,
+  }) async {
+    try {
+      final cleanTarget = normalizePhone(targetPhone);
+      final title = 'আমন্ত্রণ গ্রহণ করা হয়েছে 🎉';
+      final body = '$memberName "$familyName" পরিবারে যুক্ত হওয়ার আমন্ত্রণ গ্রহণ করেছেন!';
+
+      await FirebaseFirestore.instance
+          .collection('families')
+          .doc(familyId)
+          .collection('notifications')
+          .add({
+        'title': title,
+        'body': body,
+        'type': 'invite_accepted',
+        'memberName': memberName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'time': DateTime.now().toIso8601String(),
+      });
+
+      final tokens = <String>[];
+      if (cleanTarget.isNotEmpty) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(cleanTarget).get();
+        final token = userDoc.data()?['fcmToken']?.toString();
+        if (token != null && token.isNotEmpty) tokens.add(token);
+      }
+      final otherTokens = await getOtherFamilyMemberTokens(familyId: familyId, excludePhone: cleanTarget);
+      for (final t in otherTokens) {
+        if (!tokens.contains(t)) tokens.add(t);
+      }
+
+      await sendFcmNotificationToTokens(
+        tokens: tokens,
+        title: title,
+        body: body,
+        senderName: memberName,
+        extraData: {'familyId': familyId, 'type': 'invite_accepted'},
+      );
+    } catch (e) {
+      debugPrint('broadcastFamilyInviteAcceptedNotification error: $e');
+    }
+  }
+
+  /// Broadcast push when user rejects family join invitation
+  Future<void> broadcastFamilyInviteRejectedNotification({
+    required String targetPhone,
+    required String memberName,
+    required String familyName,
+    required String familyId,
+  }) async {
+    try {
+      final cleanTarget = normalizePhone(targetPhone);
+      final title = 'আমন্ত্রণ প্রত্যাখ্যান ℹ️';
+      final body = '$memberName "$familyName" পরিবারের আমন্ত্রণ গ্রহণ করেননি।';
+
+      final tokens = <String>[];
+      if (cleanTarget.isNotEmpty) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(cleanTarget).get();
+        final token = userDoc.data()?['fcmToken']?.toString();
+        if (token != null && token.isNotEmpty) tokens.add(token);
+      }
+
+      await sendFcmNotificationToTokens(
+        tokens: tokens,
+        title: title,
+        body: body,
+        senderName: memberName,
+        extraData: {'familyId': familyId, 'type': 'invite_rejected'},
+      );
+    } catch (e) {
+      debugPrint('broadcastFamilyInviteRejectedNotification error: $e');
+    }
+  }
+
+  /// Broadcast categorized transaction entry or update (Income, Expense, Loan Given, Loan Taken, EMI, Savings)
+  /// Strictly sends push only to OTHER family members, NEVER the sender!
+  Future<void> broadcastTransactionNotification({
+    required String familyId,
+    required String userName,
+    required String userPhone,
+    required String purpose,
+    required double amount,
+    required String transactionType,
+    String? categoryName,
+    String? imageUrl,
+    bool isUpdate = false,
+  }) async {
+    try {
+      final cleanSender = normalizePhone(userPhone.isNotEmpty ? userPhone : (_currentUserPhone ?? ''));
+      final formattedAmount = '৳ ${amount.toStringAsFixed(0)}';
+
+      String typeTitle;
+      String typeLabel;
+      switch (transactionType.toLowerCase()) {
+        case 'income':
+          typeTitle = isUpdate ? 'আয়ের হিসাব হালনাগাদ 💰' : 'নতুন আয় যুক্ত হয়েছে 💰';
+          typeLabel = 'আয়';
+          break;
+        case 'loan_given':
+        case 'loangiven':
+          typeTitle = isUpdate ? 'ঋণ প্রদান হালনাগাদ 🤝' : 'নতুন ঋণ প্রদান করা হয়েছে 🤝';
+          typeLabel = 'ধার প্রদান';
+          break;
+        case 'loan_taken':
+        case 'loantaken':
+          typeTitle = isUpdate ? 'ঋণ গ্রহণ হালনাগাদ 📥' : 'নতুন ঋণ গ্রহণ করা হয়েছে 📥';
+          typeLabel = 'ধার গ্রহণ';
+          break;
+        case 'emi':
+        case 'emi_installment':
+          typeTitle = isUpdate ? 'কিস্তি হালনাগাদ 📅' : 'নতুন কিস্তি/ইএমআই যুক্ত হয়েছে 📅';
+          typeLabel = 'কিস্তি';
+          break;
+        case 'savings':
+          typeTitle = isUpdate ? 'সঞ্চয় হিসাব হালনাগাদ 🏦' : 'নতুন সঞ্চয় জমা হয়েছে 🏦';
+          typeLabel = 'সঞ্চয়';
+          break;
+        default:
+          typeTitle = isUpdate ? 'ব্যয়ের হিসাব হালনাগাদ 💸' : 'নতুন খরচ যুক্ত হয়েছে 💸';
+          typeLabel = 'খরচ';
+      }
+
+      final cat = (categoryName != null && categoryName.isNotEmpty) ? ' ($categoryName)' : '';
+      final body = isUpdate
+          ? '$userName $formattedAmount টাকার "$purpose"$cat হিসাব হালনাগাদ করেছেন।'
+          : '$userName $formattedAmount টাকার "$purpose"$cat $typeLabel যুক্ত করেছেন।';
+
+      // 1. Write to Firestore notifications collection so active apps receive it in real-time stream
+      await FirebaseFirestore.instance
+          .collection('families')
+          .doc(familyId)
+          .collection('notifications')
+          .add({
+        'title': typeTitle,
+        'body': body,
+        'type': isUpdate ? 'transaction_update' : 'transaction_entry',
+        'transactionType': transactionType,
+        'memberName': userName,
+        'senderPhone': cleanSender,
+        'amount': amount,
+        'purpose': purpose,
+        'imageUrl': imageUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+        'time': DateTime.now().toIso8601String(),
+      });
+
+      // 2. Dispatch FCM push strictly to OTHER family members (strictly excluding sender!)
+      final tokens = await getOtherFamilyMemberTokens(
+        familyId: familyId,
+        excludePhone: cleanSender,
+      );
+
+      debugPrint('[FCM Engine] Broadcasting transaction push ($typeTitle) to ${tokens.length} other members.');
+
+      await sendFcmNotificationToTokens(
+        tokens: tokens,
+        title: '$typeTitle: $formattedAmount',
+        body: '$userName: $purpose$cat',
+        senderName: userName,
+        senderPhone: cleanSender,
+        imageUrl: imageUrl,
+        extraData: {
+          'familyId': familyId,
+          'type': isUpdate ? 'transaction_update' : 'transaction_entry',
+          'transactionType': transactionType,
+        },
+      );
+    } catch (e) {
+      debugPrint('broadcastTransactionNotification error: $e');
     }
   }
 
@@ -1182,7 +1456,7 @@ class NotificationService {
   }) async {
     final title = '🚨 জরুরি সতর্কতা: বিপদে আছেন!';
     final body = '$userName বিপদে আছেন এবং জরুরি সাহায্য চেয়েছেন!\nবর্তমান অবস্থান: $locationUrl';
-    final cleanSender = userPhone.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '');
+    final cleanSender = normalizePhone(userPhone.isNotEmpty ? userPhone : (_currentUserPhone ?? ''));
 
     if (familyId.isNotEmpty) {
       try {
@@ -1219,11 +1493,20 @@ class NotificationService {
           _controller.add(List.unmodifiable(_notifications));
         }
 
-        // Dispatch FCM push to other family members
+        // Show local notification banner on sender's device as immediate confirmation
+        showLocalNotification(
+          id: 99999,
+          title: '🚨 আপনি জরুরি সতর্কতা (SOS) পাঠিয়েছেন',
+          body: 'পরিবার সদস্যদের কাছে আপনার জরুরি সংকেত ও অবস্থান পাঠানো হয়েছে।',
+        );
+
+        // Dispatch FCM push to ALL other family members
         final tokens = await getOtherFamilyMemberTokens(
           familyId: familyId,
           excludePhone: cleanSender,
         );
+
+        debugPrint('[SOS Engine] Sending emergency push to ${tokens.length} family members.');
         await sendFcmNotificationToTokens(
           tokens: tokens,
           title: title,

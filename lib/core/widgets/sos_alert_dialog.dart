@@ -11,12 +11,26 @@ class SosAlertDialog extends StatefulWidget {
     required this.event,
   });
 
-  static Future<void> show(BuildContext context, SosTriggerEvent event) {
-    return showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => SosAlertDialog(event: event),
-    );
+  static bool _isShowing = false;
+  static bool get isShowing => _isShowing;
+
+  static Future<void> show(BuildContext context, SosTriggerEvent event) async {
+    if (_isShowing) {
+      debugPrint('SosAlertDialog already showing, suppressing duplicate dialog popup.');
+      return;
+    }
+    _isShowing = true;
+    SosShakeService().isSosDialogActive = true;
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => SosAlertDialog(event: event),
+      );
+    } finally {
+      _isShowing = false;
+      SosShakeService().isSosDialogActive = false;
+    }
   }
 
   @override

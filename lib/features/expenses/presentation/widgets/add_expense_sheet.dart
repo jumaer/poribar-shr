@@ -515,13 +515,17 @@ class _AddExpenseSheetState extends ConsumerState<AddExpenseSheet> {
                     imageUrl: imagePath,
                   );
                 } else {
-                  // Broadcast regular push notification with image to all family members
-                  NotificationService().broadcastExpenseEntryNotification(
+                  // Broadcast categorized transaction notification strictly to other family members (Income, Expense, Loan, EMI, Savings)
+                  NotificationService().broadcastTransactionNotification(
                     familyId: familyId,
                     userName: userName,
+                    userPhone: currentUser?.phoneNumber ?? '',
                     purpose: purposeText,
                     amount: amount,
+                    transactionType: _type.name,
+                    categoryName: _selectedCategory?.nameBn,
                     imageUrl: imagePath,
+                    isUpdate: false,
                   );
                 }
 
